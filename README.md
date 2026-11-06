@@ -32,4 +32,6 @@ On Windows:
 - `js/audio.js`, `js/waveform.js`: recording, playback, waveforms
 - `js/db.js`: on-phone storage (IndexedDB)
 - `js/clippack.js`: imports the clip pack zip
+- `js/vosdata.js`: verb bank for the vos trainer
+- `js/anki.js`: builds Anki .apkg files on the phone (uses `vendor/sqljs`, MIT)
 - `tools/prepare_openslr.py`: builds the clip pack on a computer
