@@ -5,6 +5,7 @@ import { transcribe } from '../ipa.js';
 import { Player, Recorder, decode, peaks } from '../audio.js';
 import { Waveform, onset, speechEnd } from '../waveform.js';
 import { pitchTrack } from '../pitch.js';
+import { alignTakes } from '../dtw.js';
 
 const SESSION = 10;
 let session = null; // survives tab switches: { ids, index, level }
@@ -79,17 +80,43 @@ export async function render(main) {
   const alignStart = h('button', { type: 'button', class: 'pill', style: 'min-height:40px' }, 'Alinear inicio');
   const matchLen = h('button', { type: 'button', class: 'pill', 'aria-pressed': 'false', style: 'min-height:40px' }, 'Igualar duración');
   const resetAlign = h('button', { type: 'button', class: 'pill', style: 'min-height:40px' }, 'Reiniciar');
+  const syllBtn = h('button', { type: 'button', class: 'pill', 'aria-pressed': 'false', style: 'min-height:40px' }, 'Alinear sílabas');
+  const rhythmInfo = h('div', { class: 'small', hidden: true, style: 'display:flex;flex-direction:column;gap:4px' });
   const alignInfo = h('span', { class: 'muted small', 'aria-live': 'polite' });
+  const dragHint = h('span', { class: 'muted small' }, 'Arrastrá tu onda (naranja) para moverla en el tiempo.');
   const alignRow = h('div', { class: 'card', hidden: true, style: 'gap:8px;padding:12px 14px' },
     h('div', { class: 'between' }, h('span', { class: 'small', style: 'font-weight:700' }, 'Alinear tu voz'), alignInfo),
-    h('div', { class: 'row wrap', style: 'gap:6px' }, alignStart, matchLen, resetAlign),
-    h('span', { class: 'muted small' }, 'Arrastrá tu onda (naranja) para moverla en el tiempo.'));
+    h('div', { class: 'row wrap', style: 'gap:6px' }, syllBtn, alignStart, matchLen, resetAlign),
+    rhythmInfo,
+    dragHint);
   main.append(alignRow);
   const fmtSec = (x) => (x >= 0 ? '+' : '−') + Math.abs(x).toFixed(2).replace('.', ',') + ' s';
   function showAlign() {
     alignRow.hidden = !(wave.aligned() && wave.user);
-    alignInfo.textContent = wave.user ? `desfase ${fmtSec(wave.offset)}${wave.scale !== 1 ? ` · ×${wave.scale.toFixed(2).replace('.', ',')}` : ''}` : '';
+    const warped = wave.warped();
+    alignInfo.textContent = !wave.user ? '' : warped ? 'sílaba por sílaba' : `desfase ${fmtSec(wave.offset)}${wave.scale !== 1 ? ` · ×${wave.scale.toFixed(2).replace('.', ',')}` : ''}`;
+    [alignStart, matchLen, resetAlign, dragHint].forEach((el) => { el.hidden = warped; });
+    rhythmInfo.hidden = !warped;
   }
+  let nativeBuf = null, userBuf = null;
+  function syllables(on) {
+    syllBtn.setAttribute('aria-pressed', String(on));
+    wave.warpOn = on;
+    if (on && !wave.warp && nativeBuf && userBuf) {
+      wave.warp = alignTakes(nativeBuf, userBuf, onset(wave.native), speechEnd(wave.native), onset(wave.user), speechEnd(wave.user));
+      if (!wave.warp) { toast('No pude alinear esta toma. Probá grabarla de nuevo.'); syllBtn.setAttribute('aria-pressed', 'false'); wave.warpOn = false; }
+    }
+    if (wave.warp) {
+      const pct = Math.round(wave.warp.similarity * 100);
+      rhythmInfo.replaceChildren(
+        h('span', { style: 'font-weight:700' }, `Ritmo parecido: ${pct}%`),
+        h('span', { class: 'muted' }, h('span', { style: 'color:var(--user);font-weight:700' }, '■ naranja'), ': ahí fuiste más lento · ',
+          h('span', { style: 'color:var(--native-fast);font-weight:700' }, '■ azul'), ': más rápido. Tu toma se estira para coincidir sílaba por sílaba.'));
+    }
+    if (on) matchLength(true); // keeps Mezcla 50/50 roughly in sync
+    wave.draw(); showAlign();
+  }
+  syllBtn.onclick = () => syllables(syllBtn.getAttribute('aria-pressed') !== 'true');
   wave.onDrag = showAlign;
   function autoAlignStart() {
     if (!wave.user || !wave.native) return;
@@ -155,7 +182,7 @@ export async function render(main) {
     cancelAnimationFrame(raf);
     const loop = () => {
       const src = native.playing ? native : mine.playing ? mine : null;
-      const t = !src ? null : src === native ? native.time : (wave.aligned() ? wave.offset + mine.time * wave.scale : mine.time);
+      const t = !src ? null : src === native ? native.time : wave.warped() ? wave.fromUser(mine.time) : (wave.aligned() ? wave.offset + mine.time * wave.scale : mine.time);
       wave.playhead = src || mixing ? { t: src ? t : 0 } : null;
       if (!src && mixing && mixTimer) { raf = requestAnimationFrame(loop); return; }
       wave.draw();
@@ -178,13 +205,14 @@ export async function render(main) {
     ipaLine.textContent = transcribe(current.text);
     mine.load(null); mineBtn.disabled = true; mixBtn.disabled = true;
     wave.offset = 0; wave.scale = 1; matchLen.setAttribute('aria-pressed', 'false');
-    wave.nativePitch = null; wave.userPitch = null;
+    wave.nativePitch = null; wave.userPitch = null; wave.warp = null; userBuf = null; nativeBuf = null;
     wave.setUser(null); showAlign();
     nativeBlob = await db.audioFor(id);
     native.load(nativeBlob);
     if (nativeBlob) {
       try {
         const buf = await decode(nativeBlob);
+        nativeBuf = buf;
         wave.setNative(peaks(buf), buf.duration);
         setTimeout(() => { if (current && current.id === id) wave.setNativePitch(pitchTrack(buf)); }, 0);
         timeEnd.textContent = buf.duration.toFixed(1).replace('.', ',') + ' s';
@@ -201,10 +229,12 @@ export async function render(main) {
     mine.load(blob); mineBtn.disabled = false; mixBtn.disabled = false;
     try {
       const buf = await decode(blob);
+      userBuf = buf; wave.warp = null;
       wave.setUser(peaks(buf), buf.duration);
       wave.setUserPitch(pitchTrack(buf));
       wave.scale = 1; matchLen.setAttribute('aria-pressed', 'false');
       autoAlignStart();
+      if (syllBtn.getAttribute('aria-pressed') === 'true') syllables(true);
     } catch { toast('No pude leer la grabación'); }
   }
 

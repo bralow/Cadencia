@@ -1,6 +1,6 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.06-k (melodía)';
+export const APP_VERSION = '2026.11.06-l (alinear sílabas)';
 import { h } from './ui.js';
 
 applyTheme();

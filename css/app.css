@@ -4,7 +4,7 @@
   --accent: #B5482A; --accent-ink: #FFF8EE; --accent-ring: #F0C9B7;
   --sel: #1C2541; --sel-ink: #F5EDE0;
   --hero: #1C2541; --hero-ink: #F5EDE0; --hero-muted: #D9D2C3; --gold: #C99A2E; --gold-text: #E2B95A;
-  --native: #1C2541; --user: #D0663F;
+  --native: #1C2541; --user: #D0663F; --native-fast: #3D7CC4;
   --display: 'Fraunces', Georgia, serif; --body: 'DM Sans', system-ui, sans-serif; --ipa-font: 'Noto Sans', system-ui, sans-serif;
   color-scheme: light;
 }
@@ -14,7 +14,7 @@
   --accent: #E58A63; --accent-ink: #14182A; --accent-ring: #5A3328;
   --sel: #F3EAD9; --sel-ink: #14182A;
   --hero: #1E2338; --hero-ink: #F3EAD9; --hero-muted: #AEB3C4;
-  --native: #8FC1EA; --user: #E58A63;
+  --native: #8FC1EA; --user: #E58A63; --native-fast: #8FC1EA;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
