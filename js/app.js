@@ -1,6 +1,6 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.06-f (alinear tu voz)';
+export const APP_VERSION = '2026.11.06-g (alinear tu voz)';
 import { h } from './ui.js';
 
 applyTheme();
@@ -44,7 +44,7 @@ window.addEventListener('hashchange', route);
 window.addEventListener('cadencia:rerender', route);
 route();
 
-if ('serviceWorker' in navigator && location.protocol === 'https:') {
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then((reg) => reg.update()).catch(() => {});
   // When a new version takes over, reload once so the new code runs.
   let reloaded = false;
