@@ -1,6 +1,6 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.06-j (voz argentina)';
+export const APP_VERSION = '2026.11.06-k (melodía)';
 import { h } from './ui.js';
 
 applyTheme();

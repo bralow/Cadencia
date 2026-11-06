@@ -48,7 +48,8 @@ export async function render(main) {
       ttsStatus.textContent = 'No funcionó: ' + (err.message || err);
     }
   };
-  main.append(h('section', { class: 'card' },
+  const SHOW_VOICE = false; // Azure voice setup is parked until the user wants it
+  if (SHOW_VOICE) main.append(h('section', { class: 'card' },
     h('h3', { style: 'font-size:15px;font-weight:700' }, 'Voz argentina'),
     h('p', { class: 'muted small', style: 'line-height:1.4' }, 'Para que Escuchar hable con acento argentino. Usa Azure (gratis hasta 500.000 caracteres por mes). Sin clave, usa la voz del teléfono.'),
     keyField, regionField, voicePills, testBtn, ttsStatus));

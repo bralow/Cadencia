@@ -4,9 +4,11 @@ import { getSettings } from '../settings.js';
 import { transcribe } from '../ipa.js';
 import { Player, Recorder, decode, peaks } from '../audio.js';
 import { Waveform, onset, speechEnd } from '../waveform.js';
+import { pitchTrack } from '../pitch.js';
 
 const SESSION = 10;
 let session = null; // survives tab switches: { ids, index, level }
+let viewMode = 'wave'; // 'wave' | 'pitch'
 
 export function practiceTabs(active) {
   return h('div', { class: 'seg', role: 'navigation', 'aria-label': 'Modo de práctica' },
@@ -50,14 +52,28 @@ export async function render(main) {
   // --- Waveform card
   const canvas = h('canvas', { class: 'wave', role: 'img', 'aria-label': 'Ondas de la voz nativa y la tuya' });
   const overlayBtn = h('button', { type: 'button', class: 'pill', 'aria-pressed': 'false', style: 'min-height:40px' }, 'Superponer');
+  const waveTab = h('button', { type: 'button', class: 'pill', style: 'min-height:38px;border:none', 'aria-pressed': String(viewMode === 'wave') }, 'Ondas');
+  const pitchTab = h('button', { type: 'button', class: 'pill', style: 'min-height:38px;border:none', 'aria-pressed': String(viewMode === 'pitch') }, 'Melodía');
+  const pitchHint = h('p', { class: 'muted small', hidden: viewMode !== 'pitch' }, 'La línea muestra cómo sube y baja la voz. Cada voz se mide desde su propio tono medio, así se comparan aunque sean de hombre y mujer.');
   const timeEnd = h('span');
   main.append(h('section', { class: 'card', 'aria-label': 'Ondas de audio', style: 'gap:8px;padding:14px 16px' },
-    h('div', { class: 'between' },
-      h('div', { class: 'legend' }, h('span', {}, h('i', { style: 'background:var(--native)' }), 'Nativa'), h('span', {}, h('i', { style: 'background:var(--user)' }), 'Vos')),
-      overlayBtn),
-    canvas,
+    h('div', { class: 'between' }, h('div', { class: 'seg', role: 'group', 'aria-label': 'Vista' }, waveTab, pitchTab), overlayBtn),
+    h('div', { class: 'legend' }, h('span', {}, h('i', { style: 'background:var(--native)' }), 'Nativa'), h('span', {}, h('i', { style: 'background:var(--user)' }), 'Vos')),
+    canvas, pitchHint,
     h('div', { class: 'between muted', style: 'font-size:11px' }, h('span', {}, '0,0 s'), timeEnd)));
   const wave = new Waveform(canvas);
+  wave.mode = viewMode;
+  function setView(m) {
+    viewMode = m; wave.mode = m;
+    waveTab.setAttribute('aria-pressed', String(m === 'wave'));
+    pitchTab.setAttribute('aria-pressed', String(m === 'pitch'));
+    overlayBtn.hidden = m === 'pitch';
+    pitchHint.hidden = m !== 'pitch';
+    canvas.setAttribute('aria-label', m === 'pitch' ? 'Melodía de la voz nativa y la tuya' : 'Ondas de la voz nativa y la tuya');
+    wave.draw(); showAlign();
+  }
+  waveTab.onclick = () => setView('wave');
+  pitchTab.onclick = () => setView('pitch');
 
   // --- Alignment tools (overlay view, once there's a recording)
   const alignStart = h('button', { type: 'button', class: 'pill', style: 'min-height:40px' }, 'Alinear inicio');
@@ -71,7 +87,7 @@ export async function render(main) {
   main.append(alignRow);
   const fmtSec = (x) => (x >= 0 ? '+' : '−') + Math.abs(x).toFixed(2).replace('.', ',') + ' s';
   function showAlign() {
-    alignRow.hidden = !(wave.overlay && wave.user);
+    alignRow.hidden = !(wave.aligned() && wave.user);
     alignInfo.textContent = wave.user ? `desfase ${fmtSec(wave.offset)}${wave.scale !== 1 ? ` · ×${wave.scale.toFixed(2).replace('.', ',')}` : ''}` : '';
   }
   wave.onDrag = showAlign;
@@ -139,7 +155,7 @@ export async function render(main) {
     cancelAnimationFrame(raf);
     const loop = () => {
       const src = native.playing ? native : mine.playing ? mine : null;
-      const t = !src ? null : src === native ? native.time : (wave.overlay ? wave.offset + mine.time * wave.scale : mine.time);
+      const t = !src ? null : src === native ? native.time : (wave.aligned() ? wave.offset + mine.time * wave.scale : mine.time);
       wave.playhead = src || mixing ? { t: src ? t : 0 } : null;
       if (!src && mixing && mixTimer) { raf = requestAnimationFrame(loop); return; }
       wave.draw();
@@ -162,6 +178,7 @@ export async function render(main) {
     ipaLine.textContent = transcribe(current.text);
     mine.load(null); mineBtn.disabled = true; mixBtn.disabled = true;
     wave.offset = 0; wave.scale = 1; matchLen.setAttribute('aria-pressed', 'false');
+    wave.nativePitch = null; wave.userPitch = null;
     wave.setUser(null); showAlign();
     nativeBlob = await db.audioFor(id);
     native.load(nativeBlob);
@@ -169,6 +186,7 @@ export async function render(main) {
       try {
         const buf = await decode(nativeBlob);
         wave.setNative(peaks(buf), buf.duration);
+        setTimeout(() => { if (current && current.id === id) wave.setNativePitch(pitchTrack(buf)); }, 0);
         timeEnd.textContent = buf.duration.toFixed(1).replace('.', ',') + ' s';
       } catch { wave.setNative(null); }
     }
@@ -184,6 +202,7 @@ export async function render(main) {
     try {
       const buf = await decode(blob);
       wave.setUser(peaks(buf), buf.duration);
+      wave.setUserPitch(pitchTrack(buf));
       wave.scale = 1; matchLen.setAttribute('aria-pressed', 'false');
       autoAlignStart();
     } catch { toast('No pude leer la grabación'); }
@@ -210,7 +229,7 @@ export async function render(main) {
   mixBtn.onclick = () => {
     stopAll();
     mixing = true;
-    const off = wave.overlay ? wave.offset : 0, sc = wave.overlay ? wave.scale : 1;
+    const off = wave.aligned() ? wave.offset : 0, sc = wave.aligned() ? wave.scale : 1;
     native.rate = 1; native.volume = 0.5; mine.volume = 0.5; mine.rate = 1 / sc;
     native.play();
     if (off > 0) { mine.el.currentTime = 0; mixTimer = setTimeout(() => { mixTimer = 0; if (mixing) mine.play(false); }, off * 1000); }
@@ -240,6 +259,7 @@ export async function render(main) {
   };
 
   await loadClip();
+  setView(viewMode);
   requestAnimationFrame(() => wave.draw());
 
   return () => {

@@ -3,11 +3,11 @@
 // (cache-busting query, so GitHub's CDN can't hand back a stale copy). The app then runs
 // entirely from that snapshot, so old and new files can never mix. When sw.js changes,
 // the browser installs the new snapshot, swaps it in, and the page reloads once.
-const VERSION = '2026.11.06-j';
+const VERSION = '2026.11.06-k';
 const CACHE = 'cadencia-' + VERSION;
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
-  'js/app.js', 'js/ui.js', 'js/settings.js', 'js/db.js', 'js/ipa.js', 'js/audio.js', 'js/waveform.js', 'js/clippack.js', 'js/vosdata.js', 'js/anki.js', 'js/tts.js',
+  'js/app.js', 'js/ui.js', 'js/settings.js', 'js/db.js', 'js/ipa.js', 'js/audio.js', 'js/waveform.js', 'js/clippack.js', 'js/vosdata.js', 'js/anki.js', 'js/tts.js', 'js/pitch.js',
   'js/screens/hoy.js', 'js/screens/sombra.js', 'js/screens/vos.js', 'js/screens/leer.js', 'js/screens/mazo.js', 'js/screens/perfil.js',
   'vendor/sqljs/sql-wasm.js', 'vendor/sqljs/sql-wasm.wasm',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png',

@@ -29,6 +29,9 @@ export class Waveform {
     this.native = null; // { peaks: {min, max}, duration }
     this.user = null;
     this.overlay = false;
+    this.mode = 'wave'; // 'wave' | 'pitch'
+    this.nativePitch = null; // { times, st }
+    this.userPitch = null;
     this.offset = 0; // seconds the user track is shifted right (negative = left)
     this.scale = 1; // user track length multiplier
     this.playhead = null; // { t: seconds on the shared axis }
@@ -39,7 +42,7 @@ export class Waveform {
     // Horizontal drag moves the user track (overlay view only).
     let start = null;
     canvas.addEventListener('pointerdown', (e) => {
-      if (!this.overlay || !this.user) return;
+      if (!(this.overlay || this.mode === 'pitch') || !this.user) return;
       start = { x: e.clientX, offset: this.offset };
       canvas.setPointerCapture(e.pointerId);
     });
@@ -56,6 +59,10 @@ export class Waveform {
   }
   destroy() { window.removeEventListener('resize', this.resize); }
 
+  aligned() { return this.overlay || this.mode === 'pitch'; }
+  setNativePitch(p) { this.nativePitch = p; this.draw(); }
+  setUserPitch(p) { this.userPitch = p; this.draw(); }
+
   setNative(peaks, duration) { this.native = peaks ? { peaks, duration } : null; this.draw(); }
   setUser(peaks, duration) { this.user = peaks ? { peaks, duration } : null; this.draw(); }
 
@@ -63,7 +70,7 @@ export class Waveform {
   // when it runs longer), so dragging doesn't rescale everything.
   axis() {
     const n = this.native ? this.native.duration : 0;
-    if (!this.overlay) return Math.max(n, this.user ? this.user.duration : 0) || 1;
+    if (!this.aligned()) return Math.max(n, this.user ? this.user.duration : 0) || 1;
     const u = this.user ? this.user.duration * this.scale + Math.max(0, this.offset) : 0;
     return Math.max(n, this.overlay ? Math.min(u, n * 1.6 || u) : u) || 1;
   }
@@ -90,6 +97,7 @@ export class Waveform {
       g.fillRect(x, 0, 1, hgt);
     }
     g.globalAlpha = 1;
+    if (this.mode === 'pitch') { this.drawPitch(g, w, hgt, pxPerSec, nColor, uColor, grid, muted); this.drawPlayhead(g, w, hgt, pxPerSec); return; }
     if (!this.overlay) { g.fillStyle = grid; g.fillRect(0, hgt / 2 - 0.5, w, 1); }
 
     const drawTrack = (track, row, color, alpha, startSec, scale) => {
@@ -131,10 +139,47 @@ export class Waveform {
       drawTrack(this.user, rows[1], uColor, 1, 0, 1);
     }
 
-    if (this.playhead) {
-      const x = this.playhead.t * pxPerSec;
-      g.fillStyle = cssVar('--accent');
-      g.fillRect(Math.max(0, Math.min(w - 2, x)), 0, 2, hgt);
+    this.drawPlayhead(g, w, hgt, pxPerSec);
+  }
+
+  drawPlayhead(g, w, hgt, pxPerSec) {
+    if (!this.playhead) return;
+    const x = this.playhead.t * pxPerSec;
+    g.fillStyle = cssVar('--accent');
+    g.fillRect(Math.max(0, Math.min(w - 2, x)), 0, 2, hgt);
+  }
+
+  // Melody view: semitones around each speaker's own median voice, -12..+12.
+  drawPitch(g, w, hgt, pxPerSec, nColor, uColor, grid, muted) {
+    const RANGE = 12, top = 10, bottom = hgt - 10;
+    const y = (st) => top + ((RANGE - Math.max(-RANGE, Math.min(RANGE, st))) / (2 * RANGE)) * (bottom - top);
+    g.font = '11px system-ui, sans-serif';
+    for (const st of [-6, 0, 6]) {
+      g.fillStyle = grid; g.globalAlpha = st === 0 ? 1 : 0.6;
+      g.fillRect(0, Math.round(y(st)) + 0.5, w, 1);
+      g.globalAlpha = 1;
     }
+    g.fillStyle = muted;
+    g.fillText('agudo', 4, top + 10);
+    g.fillText('grave', 4, bottom - 2);
+    const line = (track, color, width, startSec, scale) => {
+      if (!track) return;
+      g.strokeStyle = color; g.lineWidth = width; g.lineJoin = 'round'; g.lineCap = 'round';
+      g.beginPath();
+      let pen = false, prevT = -1;
+      for (let i = 0; i < track.st.length; i++) {
+        const v = track.st[i];
+        const t = startSec + track.times[i] * scale;
+        if (Number.isNaN(v) || t - prevT > 0.05) pen = false;
+        if (Number.isNaN(v)) continue;
+        const px = t * pxPerSec, py = y(v);
+        if (pen) g.lineTo(px, py); else g.moveTo(px, py);
+        pen = true; prevT = t;
+      }
+      g.stroke();
+    };
+    line(this.nativePitch, nColor, 3.5, 0, 1);
+    line(this.userPitch, uColor, 2.5, this.offset, this.scale);
+    if (!this.nativePitch && !this.userPitch) { g.fillStyle = muted; g.fillText('Analizando la melodía…', 8, hgt / 2); }
   }
 }
