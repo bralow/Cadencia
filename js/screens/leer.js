@@ -1,7 +1,6 @@
 import { h, iconEl, toast } from '../ui.js';
 import { transcribe, analyzeWord } from '../ipa.js';
 import { db } from '../db.js';
-import { Player } from '../audio.js';
 
 const KEY = 'cadencia.leer';
 const SAMPLE = 'Che, ¿vamos a tomar unos mates a la plaza? Llevo la yerba y el termo. Si llueve, nos quedamos en casa y miramos el partido.';
@@ -35,12 +34,8 @@ function speak(text) {
   speechSynthesis.speak(u);
 }
 
-const LETTERS = 'a-záéíóúüñ';
-
 export async function render(main) {
   let text = localStorage.getItem(KEY) || SAMPLE;
-  const clips = await db.all('clips');
-  const player = new Player();
 
   const textBtn = h('button', { type: 'button', class: 'pill', style: 'min-height:40px;border:none', 'aria-pressed': String(view === 'text') }, 'Texto');
   const ipaBtn = h('button', { type: 'button', class: 'pill', style: 'min-height:40px;border:none', 'aria-pressed': String(view === 'ipa') }, 'IPA');
@@ -97,28 +92,8 @@ export async function render(main) {
       h('span', { style: 'padding-top:2px' }, desc)));
     const ext = (href, label) => h('a', { href, target: '_blank', rel: 'noopener', style: 'flex:1;min-height:44px;border-radius:12px;background:color-mix(in srgb, var(--hero-ink) 12%, transparent);color:var(--hero-ink);text-decoration:none;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px' },
       label, h('span', { html: '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>', style: 'display:contents' }));
-    // Real Argentine voice: sentences from the imported OpenSLR clips that contain this word.
-    const re = new RegExp(`(^|[^${LETTERS}])${a.word}([^${LETTERS}]|$)`, 'i');
-    const matches = clips.filter((c) => re.test(c.text));
-    let mi = 0;
-    const realLine = h('p', { style: 'font-size:14px;line-height:1.4;font-style:italic;color:var(--hero-muted)', lang: 'es-AR' });
-    const realCount = h('span', { style: 'font-size:12px;color:var(--hero-muted)' });
-    const playReal = async () => {
-      const c = matches[mi];
-      realLine.textContent = `“${c.text}”`;
-      realCount.textContent = `${c.speaker ? c.speaker + ' · ' : ''}frase ${mi + 1} de ${matches.length}`;
-      player.load(await db.audioFor(c.id)); player.play();
-    };
-    const listen = h('button', { type: 'button', class: 'btn ghost', style: 'flex:1;color:var(--hero-ink);border-color:var(--hero-muted)' }, iconEl('play'), matches.length ? 'Escuchar' : 'Voz sintética');
-    listen.onclick = () => (matches.length ? playReal() : speak(word));
-    const otherBtn = h('button', { type: 'button', class: 'pill', style: 'min-height:40px;background:transparent;color:var(--hero-ink);border-color:var(--hero-muted)' }, 'Otra frase');
-    otherBtn.onclick = () => { mi = (mi + 1) % matches.length; playReal(); };
-    const realBox = matches.length
-      ? h('div', { style: 'display:flex;flex-direction:column;gap:6px' },
-          h('div', { class: 'between' }, h('span', { style: 'font-size:12px;font-weight:700;color:var(--gold-text);letter-spacing:.08em' }, 'VOZ ARGENTINA REAL'), realCount),
-          realLine, matches.length > 1 ? otherBtn : null)
-      : h('p', { style: 'font-size:12px;color:var(--hero-muted)' }, 'Esta palabra no está en tus clips: “Voz sintética” usa la voz del teléfono (no argentina).');
-    if (matches.length) { realLine.textContent = `“${matches[0].text}”`; realCount.textContent = `${matches.length} frase${matches.length > 1 ? 's' : ''} con esta palabra`; }
+    const listen = h('button', { type: 'button', class: 'btn ghost', style: 'flex:1;color:var(--hero-ink);border-color:var(--hero-muted)' }, iconEl('play'), 'Escuchar');
+    listen.onclick = () => speak(word);
     const save = h('button', { type: 'button', class: 'btn', style: 'flex:1' }, 'Guardar en Mazo');
     save.onclick = async () => {
       await db.put('mazo', { front: word.toLowerCase(), ipa, back: contextFor(word), tag: '#Lectura', created: Date.now() });
@@ -132,7 +107,6 @@ export async function render(main) {
       sylRow,
       feats.length ? h('div', { style: 'display:flex;flex-direction:column;gap:8px' }, feats) : null,
       h('div', { class: 'row' }, ext(`https://dle.rae.es/${encodeURIComponent(lw)}`, 'Ver en el DLE'), ext(`https://www.asale.org/damer/${encodeURIComponent(lw)}`, 'Americanismos')),
-      realBox,
       h('div', { class: 'row' }, listen, save)].filter(Boolean));
     panel.hidden = false;
     panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -152,5 +126,5 @@ export async function render(main) {
 
   drawPassage();
   if ('speechSynthesis' in window) speechSynthesis.getVoices();
-  return () => { if ('speechSynthesis' in window) speechSynthesis.cancel(); player.load(null); };
+  return () => { if ('speechSynthesis' in window) speechSynthesis.cancel(); };
 }
