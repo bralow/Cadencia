@@ -1,6 +1,6 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.06-e (ondas detalladas)';
+export const APP_VERSION = '2026.11.06-f (alinear tu voz)';
 import { h } from './ui.js';
 
 applyTheme();

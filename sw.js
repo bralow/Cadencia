@@ -1,6 +1,6 @@
 // Offline support. App files: network first (so updates arrive right away), cache as fallback.
 // Google Fonts: cache first.
-const CACHE = 'cadencia-v5';
+const CACHE = 'cadencia-v6';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'js/app.js', 'js/ui.js', 'js/settings.js', 'js/db.js', 'js/ipa.js', 'js/audio.js', 'js/waveform.js', 'js/clippack.js', 'js/vosdata.js', 'js/anki.js',

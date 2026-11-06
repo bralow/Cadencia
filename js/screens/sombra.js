@@ -3,7 +3,7 @@ import { db } from '../db.js';
 import { getSettings } from '../settings.js';
 import { transcribe } from '../ipa.js';
 import { Player, Recorder, decode, peaks } from '../audio.js';
-import { Waveform } from '../waveform.js';
+import { Waveform, onset, speechEnd } from '../waveform.js';
 
 const SESSION = 10;
 let session = null; // survives tab switches: { ids, index, level }
@@ -59,6 +59,41 @@ export async function render(main) {
     h('div', { class: 'between muted', style: 'font-size:11px' }, h('span', {}, '0,0 s'), timeEnd)));
   const wave = new Waveform(canvas);
 
+  // --- Alignment tools (overlay view, once there's a recording)
+  const alignStart = h('button', { type: 'button', class: 'pill', style: 'min-height:40px' }, 'Alinear inicio');
+  const matchLen = h('button', { type: 'button', class: 'pill', 'aria-pressed': 'false', style: 'min-height:40px' }, 'Igualar duración');
+  const resetAlign = h('button', { type: 'button', class: 'pill', style: 'min-height:40px' }, 'Reiniciar');
+  const alignInfo = h('span', { class: 'muted small', 'aria-live': 'polite' });
+  const alignRow = h('div', { class: 'card', hidden: true, style: 'gap:8px;padding:12px 14px' },
+    h('div', { class: 'between' }, h('span', { class: 'small', style: 'font-weight:700' }, 'Alinear tu voz'), alignInfo),
+    h('div', { class: 'row wrap', style: 'gap:6px' }, alignStart, matchLen, resetAlign),
+    h('span', { class: 'muted small' }, 'Arrastrá tu onda (naranja) para moverla en el tiempo.'));
+  main.append(alignRow);
+  const fmtSec = (x) => (x >= 0 ? '+' : '−') + Math.abs(x).toFixed(2).replace('.', ',') + ' s';
+  function showAlign() {
+    alignRow.hidden = !(wave.overlay && wave.user);
+    alignInfo.textContent = wave.user ? `desfase ${fmtSec(wave.offset)}${wave.scale !== 1 ? ` · ×${wave.scale.toFixed(2).replace('.', ',')}` : ''}` : '';
+  }
+  wave.onDrag = showAlign;
+  function autoAlignStart() {
+    if (!wave.user || !wave.native) return;
+    wave.offset = onset(wave.native) - onset(wave.user) * wave.scale;
+    wave.draw(); showAlign();
+  }
+  function matchLength(on) {
+    matchLen.setAttribute('aria-pressed', String(on));
+    if (!wave.user || !wave.native) return;
+    if (on) {
+      const nSpan = speechEnd(wave.native) - onset(wave.native);
+      const uSpan = speechEnd(wave.user) - onset(wave.user);
+      wave.scale = uSpan > 0.1 ? Math.min(3, Math.max(0.33, nSpan / uSpan)) : 1;
+    } else wave.scale = 1;
+    autoAlignStart();
+  }
+  alignStart.onclick = autoAlignStart;
+  matchLen.onclick = () => matchLength(matchLen.getAttribute('aria-pressed') !== 'true');
+  resetAlign.onclick = () => { wave.offset = 0; wave.scale = 1; matchLen.setAttribute('aria-pressed', 'false'); wave.draw(); showAlign(); };
+
   // --- Speed
   const speeds = ['0.5', '0.75', '1'];
   let speed = speeds.includes(settings.speed) ? settings.speed : '1';
@@ -82,7 +117,7 @@ export async function render(main) {
 
   // --- State
   const native = new Player(), mine = new Player(), recorder = new Recorder();
-  let nativeBlob = null, current = null, raf = 0, autoStop = 0, mixing = false;
+  let nativeBlob = null, current = null, raf = 0, autoStop = 0, mixing = false, mixTimer = 0;
 
   function setSpeed(v) {
     speed = v;
@@ -95,7 +130,8 @@ export async function render(main) {
 
   function stopAll() {
     native.pause(); mine.pause();
-    if (mixing) { native.volume = 1; mine.volume = 1; native.rate = parseFloat(speed); mixing = false; }
+    clearTimeout(mixTimer);
+    if (mixing) { native.volume = 1; mine.volume = 1; native.rate = parseFloat(speed); mine.rate = 1; mixing = false; }
     setIcon(playBtn, 'play'); setIcon(mineBtn, 'play');
   }
 
@@ -103,7 +139,9 @@ export async function render(main) {
     cancelAnimationFrame(raf);
     const loop = () => {
       const src = native.playing ? native : mine.playing ? mine : null;
-      wave.playhead = src ? { t: src.time } : null;
+      const t = !src ? null : src === native ? native.time : (wave.overlay ? wave.offset + mine.time * wave.scale : mine.time);
+      wave.playhead = src || mixing ? { t: src ? t : 0 } : null;
+      if (!src && mixing && mixTimer) { raf = requestAnimationFrame(loop); return; }
       wave.draw();
       if (src) raf = requestAnimationFrame(loop);
       else { setIcon(playBtn, 'play'); setIcon(mineBtn, 'play'); if (mixing) stopAll(); }
@@ -123,7 +161,8 @@ export async function render(main) {
     sentence.textContent = current.text;
     ipaLine.textContent = transcribe(current.text);
     mine.load(null); mineBtn.disabled = true; mixBtn.disabled = true;
-    wave.setUser(null);
+    wave.offset = 0; wave.scale = 1; matchLen.setAttribute('aria-pressed', 'false');
+    wave.setUser(null); showAlign();
     nativeBlob = await db.audioFor(id);
     native.load(nativeBlob);
     if (nativeBlob) {
@@ -145,6 +184,8 @@ export async function render(main) {
     try {
       const buf = await decode(blob);
       wave.setUser(peaks(buf), buf.duration);
+      wave.scale = 1; matchLen.setAttribute('aria-pressed', 'false');
+      autoAlignStart();
     } catch { toast('No pude leer la grabación'); }
   }
 
@@ -169,8 +210,12 @@ export async function render(main) {
   mixBtn.onclick = () => {
     stopAll();
     mixing = true;
-    native.rate = 1; native.volume = 0.5; mine.volume = 0.5;
-    native.play(); mine.play(); tick();
+    const off = wave.overlay ? wave.offset : 0, sc = wave.overlay ? wave.scale : 1;
+    native.rate = 1; native.volume = 0.5; mine.volume = 0.5; mine.rate = 1 / sc;
+    native.play();
+    if (off > 0) { mine.el.currentTime = 0; mixTimer = setTimeout(() => { mixTimer = 0; if (mixing) mine.play(false); }, off * 1000); }
+    else { mine.el.currentTime = -off / sc; mine.play(false); }
+    tick();
   };
   loopBtn.onclick = () => {
     const on = loopBtn.getAttribute('aria-pressed') !== 'true';
@@ -180,7 +225,7 @@ export async function render(main) {
   overlayBtn.onclick = () => {
     wave.overlay = !wave.overlay;
     overlayBtn.setAttribute('aria-pressed', String(wave.overlay));
-    wave.draw();
+    wave.draw(); showAlign();
   };
   saveBtn.onclick = async () => {
     if (!current) return;
