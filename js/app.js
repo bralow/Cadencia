@@ -1,6 +1,6 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.06-g (alinear tu voz)';
+export const APP_VERSION = '2026.11.06-h (voz argentina en Leer)';
 import { h } from './ui.js';
 
 applyTheme();
