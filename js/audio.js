@@ -10,20 +10,21 @@ export async function decode(blob) {
   return audioCtx().decodeAudioData(buf);
 }
 
-// Peak envelope: `n` values in 0..1 (normalized to the loudest bucket).
-export function peaks(buffer, n) {
+// Detailed envelope: `n` buckets, each with the min and max sample, normalized to -1..1.
+export function peaks(buffer, n = 2000) {
   const data = buffer.getChannelData(0);
   const size = Math.max(1, Math.floor(data.length / n));
-  const out = new Array(n).fill(0);
-  let max = 0;
+  const min = new Float32Array(n), max = new Float32Array(n);
+  let top = 0;
   for (let i = 0; i < n; i++) {
-    let m = 0;
+    let lo = 0, hi = 0;
     const start = i * size, end = Math.min(data.length, start + size);
-    for (let j = start; j < end; j += 4) { const v = Math.abs(data[j]); if (v > m) m = v; }
-    out[i] = m;
-    if (m > max) max = m;
+    for (let j = start; j < end; j++) { const v = data[j]; if (v < lo) lo = v; if (v > hi) hi = v; }
+    min[i] = lo; max[i] = hi;
+    top = Math.max(top, hi, -lo);
   }
-  return max ? out.map((v) => v / max) : out;
+  if (top) for (let i = 0; i < n; i++) { min[i] /= top; max[i] /= top; }
+  return { min, max };
 }
 
 // One <audio> element per source, so speed changes keep the pitch.

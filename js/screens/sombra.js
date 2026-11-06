@@ -129,7 +129,7 @@ export async function render(main) {
     if (nativeBlob) {
       try {
         const buf = await decode(nativeBlob);
-        wave.setNative(peaks(buf, 256), buf.duration);
+        wave.setNative(peaks(buf), buf.duration);
         timeEnd.textContent = buf.duration.toFixed(1).replace('.', ',') + ' s';
       } catch { wave.setNative(null); }
     }
@@ -144,7 +144,7 @@ export async function render(main) {
     mine.load(blob); mineBtn.disabled = false; mixBtn.disabled = false;
     try {
       const buf = await decode(blob);
-      wave.setUser(peaks(buf, 256), buf.duration);
+      wave.setUser(peaks(buf), buf.duration);
     } catch { toast('No pude leer la grabación'); }
   }
 
