@@ -24,12 +24,18 @@ function features(word, ipa) {
 }
 
 
+export function readTabs(active) {
+  return h('div', { class: 'seg', role: 'navigation', 'aria-label': 'Leer' },
+    active === 'lectura' ? h('span', { class: 'on', 'aria-current': 'page' }, 'Lectura') : h('a', { href: '#/leer' }, 'Lectura'),
+    active === 'lunfardo' ? h('span', { class: 'on', 'aria-current': 'page' }, 'Lunfardo') : h('a', { href: '#/lunfardo' }, 'Lunfardo'));
+}
+
 export async function render(main) {
   let text = localStorage.getItem(KEY) || SAMPLE;
 
   const textBtn = h('button', { type: 'button', class: 'pill', style: 'min-height:40px;border:none', 'aria-pressed': String(view === 'text') }, 'Texto');
   const ipaBtn = h('button', { type: 'button', class: 'pill', style: 'min-height:40px;border:none', 'aria-pressed': String(view === 'ipa') }, 'IPA');
-  main.append(h('div', { class: 'between' }, h('h1', {}, 'Leer'), h('div', { class: 'seg', role: 'group', 'aria-label': 'Vista' }, textBtn, ipaBtn)));
+  main.append(h('div', { class: 'between' }, readTabs('lectura'), h('div', { class: 'seg', role: 'group', 'aria-label': 'Vista' }, textBtn, ipaBtn)));
   main.append(h('p', { class: 'muted small' }, 'Tocá cualquier palabra para ver sílabas, sonidos y guardarla.'));
 
   const passage = h('div', { lang: 'es-AR' });

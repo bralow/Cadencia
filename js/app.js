@@ -1,6 +1,6 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.06-m (oído)';
+export const APP_VERSION = '2026.11.06-n (lunfardo)';
 import { h } from './ui.js';
 
 applyTheme();
@@ -11,6 +11,7 @@ const routes = {
   vos: { tab: 'practicar', load: () => import('./screens/vos.js') },
   oido: { tab: 'practicar', load: () => import('./screens/oido.js') },
   leer: { tab: 'leer', load: () => import('./screens/leer.js') },
+  lunfardo: { tab: 'leer', load: () => import('./screens/lunfardo.js') },
   mazo: { tab: 'mazo', load: () => import('./screens/mazo.js') },
   perfil: { tab: 'perfil', load: () => import('./screens/perfil.js') },
 };
