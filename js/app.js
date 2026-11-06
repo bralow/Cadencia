@@ -1,6 +1,6 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.06-l (alinear sílabas)';
+export const APP_VERSION = '2026.11.06-m (oído)';
 import { h } from './ui.js';
 
 applyTheme();
@@ -9,6 +9,7 @@ const routes = {
   hoy: { tab: 'hoy', load: () => import('./screens/hoy.js') },
   sombra: { tab: 'practicar', load: () => import('./screens/sombra.js') },
   vos: { tab: 'practicar', load: () => import('./screens/vos.js') },
+  oido: { tab: 'practicar', load: () => import('./screens/oido.js') },
   leer: { tab: 'leer', load: () => import('./screens/leer.js') },
   mazo: { tab: 'mazo', load: () => import('./screens/mazo.js') },
   perfil: { tab: 'perfil', load: () => import('./screens/perfil.js') },

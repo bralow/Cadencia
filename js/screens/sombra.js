@@ -14,7 +14,8 @@ let viewMode = 'wave'; // 'wave' | 'pitch'
 export function practiceTabs(active) {
   return h('div', { class: 'seg', role: 'navigation', 'aria-label': 'Modo de práctica' },
     active === 'sombra' ? h('span', { class: 'on', 'aria-current': 'page' }, 'Sombra') : h('a', { href: '#/sombra' }, 'Sombra'),
-    active === 'vos' ? h('span', { class: 'on', 'aria-current': 'page' }, 'Vos') : h('a', { href: '#/vos' }, 'Vos'));
+    active === 'vos' ? h('span', { class: 'on', 'aria-current': 'page' }, 'Vos') : h('a', { href: '#/vos' }, 'Vos'),
+    active === 'oido' ? h('span', { class: 'on', 'aria-current': 'page' }, 'Oído') : h('a', { href: '#/oido' }, 'Oído'));
 }
 
 export async function render(main) {
