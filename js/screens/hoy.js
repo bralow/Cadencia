@@ -42,6 +42,10 @@ export async function render(main) {
       : 'Importá el paquete de audios de OpenSLR desde Perfil para empezar.'),
     h('a', { class: 'btn', href: clipCount ? '#/sombra' : '#/perfil', style: 'align-self:flex-start;margin-top:6px' }, clipCount ? 'Empezar' : 'Ir a Perfil', iconEl('next'))));
 
+  if (clipCount) main.append(h('section', { class: 'card' },
+    h('div', { class: 'between' }, h('h2', {}, 'Calentamiento'), h('a', { href: '#/calentamiento', style: 'font-weight:700;font-size:14px;text-decoration:none;min-height:44px;display:flex;align-items:center' }, 'Empezar →')),
+    h('p', { class: 'muted small' }, '5 frases para repetir en voz alta. Dos minutos para despertar la boca.')));
+
   main.append(h('section', { class: 'card' },
     h('div', { class: 'between' }, h('h2', {}, 'Vos en 2 minutos'), h('a', { href: '#/vos', style: 'font-weight:700;font-size:14px;text-decoration:none;min-height:44px;display:flex;align-items:center' }, 'Practicar →')),
     h('p', { class: 'muted small' }, 'tenés, querés, vení, decime: dejá el tú atrás.')));

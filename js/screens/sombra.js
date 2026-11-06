@@ -12,10 +12,12 @@ let session = null; // survives tab switches: { ids, index, level }
 let viewMode = 'wave'; // 'wave' | 'pitch'
 
 export function practiceTabs(active) {
-  return h('div', { class: 'seg', role: 'navigation', 'aria-label': 'Modo de práctica' },
-    active === 'sombra' ? h('span', { class: 'on', 'aria-current': 'page' }, 'Sombra') : h('a', { href: '#/sombra' }, 'Sombra'),
-    active === 'vos' ? h('span', { class: 'on', 'aria-current': 'page' }, 'Vos') : h('a', { href: '#/vos' }, 'Vos'),
-    active === 'oido' ? h('span', { class: 'on', 'aria-current': 'page' }, 'Oído') : h('a', { href: '#/oido' }, 'Oído'));
+  const tabs = [['sombra', 'Sombra'], ['vos', 'Vos'], ['oido', 'Oído'], ['traba', 'Trabalenguas'], ['elision', 'Elisión']];
+  const routes = { sombra: '#/sombra', vos: '#/vos', oido: '#/oido', traba: '#/trabalenguas', elision: '#/elision' };
+  const el = h('div', { class: 'seg scroll', role: 'navigation', 'aria-label': 'Modo de práctica' },
+    tabs.map(([k, label]) => (k === active ? h('span', { class: 'on', 'aria-current': 'page' }, label) : h('a', { href: routes[k] }, label))));
+  requestAnimationFrame(() => { const on = el.querySelector('.on'); if (on) on.scrollIntoView({ inline: 'center', block: 'nearest' }); });
+  return el;
 }
 
 export async function render(main) {

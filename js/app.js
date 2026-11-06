@@ -1,6 +1,6 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.06-n (lunfardo)';
+export const APP_VERSION = '2026.11.06-o (trabalenguas, elisión, calentamiento)';
 import { h } from './ui.js';
 
 applyTheme();
@@ -10,6 +10,9 @@ const routes = {
   sombra: { tab: 'practicar', load: () => import('./screens/sombra.js') },
   vos: { tab: 'practicar', load: () => import('./screens/vos.js') },
   oido: { tab: 'practicar', load: () => import('./screens/oido.js') },
+  trabalenguas: { tab: 'practicar', load: () => import('./screens/trabalenguas.js') },
+  elision: { tab: 'practicar', load: () => import('./screens/elision.js') },
+  calentamiento: { tab: 'hoy', load: () => import('./screens/calentamiento.js') },
   leer: { tab: 'leer', load: () => import('./screens/leer.js') },
   lunfardo: { tab: 'leer', load: () => import('./screens/lunfardo.js') },
   mazo: { tab: 'mazo', load: () => import('./screens/mazo.js') },
