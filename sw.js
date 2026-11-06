@@ -1,6 +1,6 @@
 // Offline support. App files: network first (so updates arrive right away), cache as fallback.
 // Google Fonts: cache first.
-const CACHE = 'cadencia-v4';
+const CACHE = 'cadencia-v5';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'js/app.js', 'js/ui.js', 'js/settings.js', 'js/db.js', 'js/ipa.js', 'js/audio.js', 'js/waveform.js', 'js/clippack.js', 'js/vosdata.js', 'js/anki.js',
@@ -10,7 +10,7 @@ const SHELL = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {
@@ -30,7 +30,8 @@ self.addEventListener('fetch', (e) => {
     return;
   }
   if (url.origin !== location.origin) return;
-  e.respondWith(fetch(req).then((res) => {
+  // Always revalidate with the server so new versions show up right away.
+  e.respondWith(fetch(req, { cache: 'no-cache' }).then((res) => {
     if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); }
     return res;
   }).catch(() => caches.match(req, { ignoreSearch: true }).then((hit) => hit || caches.match('index.html'))));

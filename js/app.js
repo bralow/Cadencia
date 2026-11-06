@@ -1,4 +1,6 @@
 import { applyTheme } from './settings.js';
+
+export const APP_VERSION = '2026.11.06-e (ondas detalladas)';
 import { h } from './ui.js';
 
 applyTheme();
@@ -43,5 +45,8 @@ window.addEventListener('cadencia:rerender', route);
 route();
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then((reg) => reg.update()).catch(() => {});
+  // When a new version takes over, reload once so the new code runs.
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (!reloaded) { reloaded = true; location.reload(); } });
 }

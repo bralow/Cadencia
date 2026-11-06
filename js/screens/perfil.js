@@ -2,6 +2,7 @@ import { h, toast, LEVELS } from '../ui.js';
 import { getSettings, setSetting } from '../settings.js';
 import { db, persist } from '../db.js';
 import { importClipPack } from '../clippack.js';
+import { APP_VERSION } from '../app.js';
 
 function pillGroup(label, options, value, onPick, { cls = 'grid6', goal = false, fmt = (x) => x } = {}) {
   const btns = options.map((o) => h('button', { type: 'button', class: 'pill' + (goal ? ' goal' : ''), 'aria-pressed': String(o === value) }, fmt(o)));
@@ -60,5 +61,6 @@ export async function render(main) {
   main.append(h('section', { style: 'padding:4px 4px 0;display:flex;flex-direction:column;gap:6px' },
     h('h3', { class: 'muted', style: 'font-size:13px;font-weight:700;letter-spacing:.08em' }, 'CRÉDITOS'),
     h('p', { class: 'muted small', style: 'line-height:1.45' }, 'Audio: corpus de español argentino de OpenSLR (Google), con licencia ',
-      h('a', { href: 'https://creativecommons.org/licenses/by-sa/4.0/', target: '_blank', rel: 'noopener' }, 'CC BY-SA 4.0'), '.')));
+      h('a', { href: 'https://creativecommons.org/licenses/by-sa/4.0/', target: '_blank', rel: 'noopener' }, 'CC BY-SA 4.0'), '.'),
+    h('p', { class: 'muted small' }, `Versión ${APP_VERSION}`)));
 }
