@@ -1,6 +1,7 @@
 import { h, iconEl, toast } from '../ui.js';
 import { transcribe, analyzeWord } from '../ipa.js';
 import { db } from '../db.js';
+import { speak, stopSpeaking, ttsReady, argentineAudio, cachedArgentineAudio } from '../tts.js';
 
 const KEY = 'cadencia.leer';
 const SAMPLE = 'Che, ¿vamos a tomar unos mates a la plaza? Llevo la yerba y el termo. Si llueve, nos quedamos en casa y miramos el partido.';
@@ -22,17 +23,6 @@ function features(word, ipa) {
   return out.slice(0, 4);
 }
 
-function speak(text) {
-  if (!('speechSynthesis' in window)) { toast('Este teléfono no tiene voz sintética'); return; }
-  const voices = speechSynthesis.getVoices();
-  const voice = voices.find((v) => v.lang === 'es-AR') || voices.find((v) => v.lang === 'es-US') || voices.find((v) => v.lang.startsWith('es'));
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = voice ? voice.lang : 'es-AR';
-  if (voice) u.voice = voice;
-  u.rate = 0.9;
-  speechSynthesis.cancel();
-  speechSynthesis.speak(u);
-}
 
 export async function render(main) {
   let text = localStorage.getItem(KEY) || SAMPLE;
@@ -93,10 +83,17 @@ export async function render(main) {
     const ext = (href, label) => h('a', { href, target: '_blank', rel: 'noopener', style: 'flex:1;min-height:44px;border-radius:12px;background:color-mix(in srgb, var(--hero-ink) 12%, transparent);color:var(--hero-ink);text-decoration:none;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px' },
       label, h('span', { html: '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>', style: 'display:contents' }));
     const listen = h('button', { type: 'button', class: 'btn ghost', style: 'flex:1;color:var(--hero-ink);border-color:var(--hero-muted)' }, iconEl('play'), 'Escuchar');
-    listen.onclick = () => speak(word);
+    listen.onclick = async () => {
+      const r = await speak(word.toLowerCase());
+      if (r.error) toast(`Voz argentina no disponible: ${r.error.message}. Uso la del teléfono.`);
+      else if (r.used === 'none') toast('Este teléfono no tiene voz sintética');
+    };
     const save = h('button', { type: 'button', class: 'btn', style: 'flex:1' }, 'Guardar en Mazo');
     save.onclick = async () => {
-      await db.put('mazo', { front: word.toLowerCase(), ipa, back: contextFor(word), tag: '#Lectura', created: Date.now() });
+      // Attach the Argentine audio when the voice is set up, so the Anki card can play it.
+      let audio = await cachedArgentineAudio(word.toLowerCase());
+      if (!audio && ttsReady()) { try { audio = await argentineAudio(word.toLowerCase()); } catch { audio = null; } }
+      await db.put('mazo', { front: word.toLowerCase(), ipa, back: contextFor(word), tag: '#Lectura', audio: audio || undefined, created: Date.now() });
       toast('Guardado en el Mazo');
     };
     const lw = a.word;
@@ -126,5 +123,5 @@ export async function render(main) {
 
   drawPassage();
   if ('speechSynthesis' in window) speechSynthesis.getVoices();
-  return () => { if ('speechSynthesis' in window) speechSynthesis.cancel(); };
+  return () => stopSpeaking();
 }

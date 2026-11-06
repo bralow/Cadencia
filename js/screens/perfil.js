@@ -3,6 +3,8 @@ import { getSettings, setSetting } from '../settings.js';
 import { db, persist } from '../db.js';
 import { importClipPack } from '../clippack.js';
 import { APP_VERSION } from '../app.js';
+import { getTts, setTts, VOICES, argentineAudio } from '../tts.js';
+import { Player } from '../audio.js';
 
 function pillGroup(label, options, value, onPick, { cls = 'grid6', goal = false, fmt = (x) => x } = {}) {
   const btns = options.map((o) => h('button', { type: 'button', class: 'pill' + (goal ? ' goal' : ''), 'aria-pressed': String(o === value) }, fmt(o)));
@@ -22,6 +24,34 @@ export async function render(main) {
   main.append(h('section', { class: 'card' },
     pillGroup('Velocidad inicial', ['0.5', '0.75', '1'], s.speed, (v) => setSetting('speed', v), { cls: 'grid3', fmt: (x) => (x === '1' ? '1.0x' : x + 'x') }),
     pillGroup('Apariencia', ['system', 'light', 'dark'], s.theme, (v) => setSetting('theme', v), { cls: 'grid3', fmt: (x) => ({ system: 'Sistema', light: 'Claro', dark: 'Oscuro' })[x] })));
+
+  // Argentine voice (Azure)
+  const tts = getTts();
+  const field = (label, id, value, attrs = {}) => [
+    h('label', { for: id, class: 'small', style: 'font-weight:600' }, label),
+    h('input', { id, value, autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', ...attrs,
+      style: 'min-height:48px;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:15px;width:100%' })];
+  const keyField = field('Clave (Key 1)', 'ttskey', tts.key, { type: 'password' });
+  const regionField = field('Región (Location/Region)', 'ttsregion', tts.region, { placeholder: 'por ejemplo: eastus' });
+  const ttsStatus = h('p', { class: 'small', role: 'status' });
+  const voicePills = pillGroup('Voz', VOICES.map((v) => v.id), tts.voice, (v) => setTts({ voice: v }), { cls: 'grid3', fmt: (id) => VOICES.find((v) => v.id === id).label });
+  const testPlayer = new Player();
+  const testBtn = h('button', { type: 'button', class: 'btn' }, 'Guardar y probar');
+  testBtn.onclick = async () => {
+    setTts({ key: keyField[1].value.trim(), region: regionField[1].value.trim() });
+    ttsStatus.textContent = 'Probando…';
+    try {
+      testPlayer.load(await argentineAudio('¡Hola, che! ¿Todo bien?', { force: true }));
+      await testPlayer.play();
+      ttsStatus.textContent = '¡Funciona! Escuchar en Leer ya usa la voz argentina.';
+    } catch (err) {
+      ttsStatus.textContent = 'No funcionó: ' + (err.message || err);
+    }
+  };
+  main.append(h('section', { class: 'card' },
+    h('h3', { style: 'font-size:15px;font-weight:700' }, 'Voz argentina'),
+    h('p', { class: 'muted small', style: 'line-height:1.4' }, 'Para que Escuchar hable con acento argentino. Usa Azure (gratis hasta 500.000 caracteres por mes). Sin clave, usa la voz del teléfono.'),
+    keyField, regionField, voicePills, testBtn, ttsStatus));
 
   // Clip pack import
   const count = h('span', { class: 'muted small' });

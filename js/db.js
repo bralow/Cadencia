@@ -2,13 +2,14 @@
 //  clips: { id, text, level, speaker }   (metadata only)
 //  audio: { id, blob }                   (clip audio, same id as clips)
 //  mazo:  { id (auto), front, ipa, back, tag, audio?: Blob, created }
+//  tts:   { id: 'voice|text', blob }      (cached Argentine voice audio)
 const DB_NAME = 'cadencia';
 let dbPromise;
 
 function open() {
   if (!dbPromise) {
     dbPromise = new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB_NAME, 1);
+      const req = indexedDB.open(DB_NAME, 2);
       req.onupgradeneeded = () => {
         const db = req.result;
         if (!db.objectStoreNames.contains('clips')) {
@@ -16,6 +17,7 @@ function open() {
           s.createIndex('level', 'level');
         }
         if (!db.objectStoreNames.contains('audio')) db.createObjectStore('audio', { keyPath: 'id' });
+        if (!db.objectStoreNames.contains('tts')) db.createObjectStore('tts', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('mazo')) db.createObjectStore('mazo', { keyPath: 'id', autoIncrement: true });
       };
       req.onsuccess = () => resolve(req.result);
