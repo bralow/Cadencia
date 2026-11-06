@@ -26,7 +26,7 @@ export async function render(main) {
   const count = h('span', { class: 'muted small' });
   const status = h('p', { class: 'small', role: 'status' });
   const refresh = async () => { const n = await db.count('clips'); count.textContent = n ? `${n} clips en el teléfono` : 'Todavía no hay clips'; };
-  const input = h('input', { type: 'file', accept: '.zip,application/zip', id: 'pack' });
+  const input = h('input', { type: 'file', accept: '.zip,application/zip,application/x-zip-compressed,application/x-zip,application/octet-stream', id: 'pack' });
   const importBtn = h('label', { for: 'pack', class: 'btn', role: 'button', tabindex: '0' }, 'Importar paquete de clips');
   importBtn.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); } };
   input.onchange = async () => {
