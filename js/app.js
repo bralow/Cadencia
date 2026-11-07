@@ -1,6 +1,6 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.07-b (letras del libro)';
+export const APP_VERSION = '2026.11.07-c (escribir)';
 import { h } from './ui.js';
 
 applyTheme();
@@ -10,6 +10,7 @@ const routes = {
   sombra: { tab: 'practicar', load: () => import('./screens/sombra.js') },
   vos: { tab: 'practicar', load: () => import('./screens/vos.js') },
   charla: { tab: 'practicar', load: () => import('./screens/charla.js') },
+  escribir: { tab: 'practicar', load: () => import('./screens/escribir.js') },
   oido: { tab: 'practicar', load: () => import('./screens/oido.js') },
   trabalenguas: { tab: 'practicar', load: () => import('./screens/trabalenguas.js') },
   elision: { tab: 'practicar', load: () => import('./screens/elision.js') },
