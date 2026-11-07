@@ -1,6 +1,6 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.06-r (recetario)';
+export const APP_VERSION = '2026.11.06-s (25 recetas)';
 import { h } from './ui.js';
 
 applyTheme();
