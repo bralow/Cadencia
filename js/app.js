@@ -1,6 +1,6 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.06-p (IPA)';
+export const APP_VERSION = '2026.11.06-q (libros y cognados)';
 import { h } from './ui.js';
 
 applyTheme();
@@ -12,10 +12,12 @@ const routes = {
   oido: { tab: 'practicar', load: () => import('./screens/oido.js') },
   trabalenguas: { tab: 'practicar', load: () => import('./screens/trabalenguas.js') },
   elision: { tab: 'practicar', load: () => import('./screens/elision.js') },
+  cognados: { tab: 'practicar', load: () => import('./screens/cognados.js') },
   calentamiento: { tab: 'hoy', load: () => import('./screens/calentamiento.js') },
   leer: { tab: 'leer', load: () => import('./screens/leer.js') },
   lunfardo: { tab: 'leer', load: () => import('./screens/lunfardo.js') },
   ipa: { tab: 'leer', load: () => import('./screens/ipa.js') },
+  libros: { tab: 'leer', load: () => import('./screens/libros.js') },
   mazo: { tab: 'mazo', load: () => import('./screens/mazo.js') },
   perfil: { tab: 'perfil', load: () => import('./screens/perfil.js') },
 };

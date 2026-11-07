@@ -1,0 +1,2 @@
+PDF.js 6.2.108 (https://github.com/mozilla/pdf.js), Apache License 2.0.
+Unmodified legacy build files from the pdfjs-dist package.
