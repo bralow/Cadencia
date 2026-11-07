@@ -1,6 +1,6 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.06-z (Flor más rápida)';
+export const APP_VERSION = '2026.11.07-a (acentos del libro)';
 import { h } from './ui.js';
 
 applyTheme();

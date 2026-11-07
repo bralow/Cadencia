@@ -109,8 +109,24 @@ export function splitStories(lines, pages) {
   return out;
 }
 
+// Some PDFs embed fonts whose letters are mislabeled, so accented letters come out as symbols
+// (á → •, ó → Û …). The mix-up is consistent, so it can be undone character by character.
+const BROKEN = { '•': 'á', 'É': 'é', 'Í': 'í', 'Û': 'ó', '°': 'ú', 'Ó': 'ñ' };
+const BROKEN_RE = /[•ÉÍÛ°Ó]/g;
+// Only when the text is clearly affected: these symbols stuck inside words (e.g. "coraz Ûn", "a•o").
+export function hasBrokenAccents(text) {
+  return (text.match(/[a-z][•Û°Ó]|[•Û°Ó][a-z]/g) || []).length >= 5;
+}
+export const fixAccents = (t) => t.replace(BROKEN_RE, (c) => BROKEN[c]);
+export function repairBook(book) {
+  const all = book.stories.map((s) => s.title + ' ' + s.paragraphs.join(' ')).join(' ');
+  if (!hasBrokenAccents(all)) return null;
+  return { ...book, title: fixAccents(book.title), stories: book.stories.map((s) => ({ ...s, title: fixAccents(s.title), paragraphs: s.paragraphs.map(fixAccents) })) };
+}
+
 export async function importPdf(file, onProgress) {
   const { lines, pages, meta } = await pdfLines(file, onProgress);
+  if (hasBrokenAccents(lines.map((l) => l.text).join(' '))) lines.forEach((l) => { l.text = fixAccents(l.text); });
   if (!lines.length) throw new Error('Este PDF no tiene texto seleccionable (parece escaneado como imagen).');
   const stories = splitStories(lines, pages);
   const title = (meta && meta.info && meta.info.Title) || file.name.replace(/\.pdf$/i, '');

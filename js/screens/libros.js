@@ -1,7 +1,7 @@
 import { h, iconEl, toast } from '../ui.js';
 import { readTabs } from './leer.js';
 import { db, persist } from '../db.js';
-import { importPdf } from '../book.js';
+import { importPdf , repairBook } from '../book.js';
 import { showWordPanel, tappableText, markWord, sentenceWith } from '../wordpanel.js';
 import { checkVoseo, applyVoseo } from '../vosfix.js';
 import { stopSpeaking } from '../tts.js';
@@ -16,6 +16,8 @@ const tagFor = (book) => (/abrazos/i.test(book.title) ? '#LibroDeLosAbrazos' : '
 export async function render(main) {
   main.append(h('div', { class: 'between' }, readTabs('libros')));
   const books = await db.all('books');
+  // Books imported before the accent fix get repaired once, in place.
+  for (let i = 0; i < books.length; i++) { const fixed = repairBook(books[i]); if (fixed) { books[i] = fixed; await db.put('books', fixed); } }
   if (openBook && openBook !== '__library__' && !books.some((b) => b.id === openBook)) { openBook = null; openStory = null; }
   if (!openBook && books.length === 1) openBook = books[0].id;
   const book = books.find((b) => b.id === openBook);
