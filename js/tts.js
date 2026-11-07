@@ -1,5 +1,6 @@
 // Argentine voice via Azure AI Speech (free F0 tier), with the phone's voice as fallback.
 // Audio is cached per voice+text on the phone, so each word is only fetched once.
+import { pickVoice } from './voz.js';
 import { db } from './db.js';
 import { Player } from './audio.js';
 
@@ -61,8 +62,7 @@ export async function cachedArgentineAudio(text) {
 
 function phoneVoice(text) {
   if (!('speechSynthesis' in window)) return false;
-  const voices = speechSynthesis.getVoices();
-  const voice = voices.find((v) => v.lang === 'es-AR') || voices.find((v) => v.lang === 'es-US') || voices.find((v) => v.lang.startsWith('es'));
+  const voice = pickVoice();
   const u = new SpeechSynthesisUtterance(text);
   u.lang = voice ? voice.lang : 'es-AR';
   if (voice) u.voice = voice;

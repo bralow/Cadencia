@@ -5,6 +5,7 @@ import { LENSES, diffWords } from './escribir.js';
 import { geminiSpeech } from './gemini.js';
 import { unlockAudio, playPcm, stopPcm } from './pcm.js';
 import { florVoice } from './florvoz.js';
+import { useFlor, phoneSay, stopPhone } from './voz.js';
 import { transcribe } from './ipa.js';
 import { db } from './db.js';
 
@@ -42,7 +43,7 @@ export function reviewView(text, r, opts = {}) {
   const views = [['corrected', 'Corregido'], ...(r.porteno ? [['porteno', 'Como un porteño']] : [])].map(([k, label]) =>
     h('button', { type: 'button', class: 'pill', style: 'min-height:36px;border:none', 'aria-pressed': String(k === view) }, label));
   const textBox = h('div');
-  const listen = h('button', { type: 'button', class: 'pill', style: 'min-height:40px' }, '▶ Escuchar a Flor');
+  const listen = h('button', { type: 'button', class: 'pill', style: 'min-height:40px' }, '▶ Escuchar');
   const keepAll = h('button', { type: 'button', class: 'pill', style: 'min-height:40px' }, 'Guardar texto');
   const reuse = opts.reuse ? h('button', { type: 'button', class: 'pill', style: 'min-height:40px' }, 'Seguir escribiendo desde acá') : '';
   const target = () => (view === 'porteno' ? r.porteno : r.corrected);
@@ -50,11 +51,12 @@ export function reviewView(text, r, opts = {}) {
     views.forEach((b, i) => b.setAttribute('aria-pressed', String((i ? 'porteno' : 'corrected') === view)));
     textBox.replaceChildren(diffView(text, target()));
   };
-  views.forEach((b, i) => { b.onclick = () => { view = i ? 'porteno' : 'corrected'; stopPcm(); listen.textContent = '▶ Escuchar a Flor'; paintText(); }; });
+  views.forEach((b, i) => { b.onclick = () => { view = i ? 'porteno' : 'corrected'; stopPcm(); stopPhone(); listen.textContent = '▶ Escuchar'; paintText(); }; });
   const audio = {};
   listen.onclick = async () => {
     unlockAudio();
-    if (listen.textContent.startsWith('■')) { stopPcm(); listen.textContent = '▶ Escuchar a Flor'; return; }
+    if (listen.textContent.startsWith('■')) { stopPcm(); stopPhone(); listen.textContent = '▶ Escuchar'; return; }
+    if (!useFlor()) { listen.textContent = '■ Parar'; await phoneSay(target()); listen.textContent = '▶ Escuchar'; return; }
     listen.textContent = '…';
     try {
       const t = target();
@@ -62,7 +64,7 @@ export function reviewView(text, r, opts = {}) {
       listen.textContent = '■ Parar';
       await playPcm(audio[t].samples, audio[t].rate);
     } catch (err) { toast('Sin voz: ' + (err.message || err)); }
-    listen.textContent = '▶ Escuchar a Flor';
+    listen.textContent = '▶ Escuchar';
   };
   keepAll.onclick = async () => {
     const t = target();

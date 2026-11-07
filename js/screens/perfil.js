@@ -1,4 +1,5 @@
 import { h, toast, LEVELS } from '../ui.js';
+import { getVoz, setVoz, listVoices, spanish, pickVoice, phoneSay } from '../voz.js';
 import { getSettings, setSetting } from '../settings.js';
 import { db, persist } from '../db.js';
 import { importClipPack } from '../clippack.js';
@@ -54,6 +55,36 @@ export async function render(main) {
     h('h3', { style: 'font-size:15px;font-weight:700' }, 'Voz argentina'),
     h('p', { class: 'muted small', style: 'line-height:1.4' }, 'Para que Escuchar hable con acento argentino. Usa Azure (gratis hasta 500.000 caracteres por mes). Sin clave, usa la voz del teléfono.'),
     keyField, regionField, voicePills, testBtn, ttsStatus));
+
+  // Voice for reading aloud: the phone's own (e.g. Vox Sherpa · Daniela) or Flor (Gemini).
+  const vz = getVoz();
+  const vSel = h('select', { 'aria-label': 'Voz del teléfono', style: 'width:100%;min-height:48px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);padding:0 10px;font-size:15px' });
+  const vStatus = h('p', { class: 'small', role: 'status', style: 'line-height:1.4' });
+  const vTry = h('button', { type: 'button', class: 'btn' }, 'Probar');
+  const vAll = h('button', { type: 'button', class: 'pill', style: 'min-height:40px;font-size:12px' }, 'Ver todas las voces');
+  const srcBtns = [['phone', 'Voz del teléfono'], ['gemini', 'Flor (Gemini)']].map(([k, l]) => h('button', { type: 'button', class: 'pill', style: 'min-height:40px;border:none', 'aria-pressed': String(vz.source === k) }, l));
+  let showAll = false;
+  async function fillVoices() {
+    const all = await listVoices();
+    const list = showAll ? all : spanish(all);
+    const chosen = pickVoice(all);
+    vSel.replaceChildren(...(list.length ? list : all).map((v) => h('option', { value: v.voiceURI }, `${v.name} (${v.lang})`)));
+    if (chosen) vSel.value = chosen.voiceURI;
+    if (!all.length) vStatus.textContent = 'Chrome no muestra ninguna voz. Revisá el motor de texto a voz del teléfono.';
+    else if (!all.some((v) => /es[-_]AR/i.test(v.lang) || /daniela|argentin/i.test(v.name))) vStatus.textContent = 'No veo una voz argentina. Si usás Vox Sherpa, ponela como motor preferido en Ajustes del teléfono (buscá «texto a voz»: suele estar en Administración general → Salida de texto a voz → Motor preferido), y después cerrá Chrome del todo y volvé a abrir la app.';
+    else vStatus.textContent = chosen ? `Usando: ${chosen.name} (${chosen.lang}).` : '';
+  }
+  vSel.onchange = () => { setVoz({ voice: vSel.value }); fillVoices(); };
+  vAll.onclick = () => { showAll = !showAll; vAll.textContent = showAll ? 'Solo voces en español' : 'Ver todas las voces'; fillVoices(); };
+  vTry.onclick = () => { phoneSay('¡Hola, che! ¿Cómo andás? Yo te voy a leer en voz alta.'); };
+  srcBtns.forEach((b, i) => { b.onclick = () => { setVoz({ source: i ? 'gemini' : 'phone' }); srcBtns.forEach((x, j) => x.setAttribute('aria-pressed', String(i === j))); }; });
+  main.append(h('section', { class: 'card' },
+    h('h3', { style: 'font-size:15px;font-weight:700' }, 'Voz para leer en voz alta'),
+    h('p', { class: 'muted small', style: 'line-height:1.4' }, 'La voz del teléfono es gratis, instantánea y funciona sin internet. Se usa en Escuchar, Trabalenguas, la tarjeta del día, Escribir, Diario y las respuestas escritas de Flor. La charla en vivo siempre usa la voz de Gemini.'),
+    h('div', { class: 'seg', role: 'group', 'aria-label': 'Voz para leer' }, srcBtns),
+    h('label', { class: 'small', style: 'font-weight:600' }, 'Voz del teléfono'), vSel,
+    h('div', { class: 'row wrap' }, vTry, vAll), vStatus));
+  fillVoices();
 
   // Gemini (AI features)
   const gm = getGemini();

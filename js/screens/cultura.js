@@ -2,7 +2,8 @@
 import { h, iconEl, toast } from '../ui.js';
 import { CARDS } from '../culturadata.js';
 import { tappableText, markWord, showWordPanel, sentenceWith } from '../wordpanel.js';
-import { florClip, florReady } from '../florvoz.js';
+import { florClip } from '../florvoz.js';
+import { useFlor, phoneSay, stopPhone } from '../voz.js';
 import { Player } from '../audio.js';
 import { transcribe } from '../ipa.js';
 import { db } from '../db.js';
@@ -46,16 +47,19 @@ export async function render(main) {
   const body = tappableText(c.text, (word, b) => { markWord(body, b); showWordPanel(panel, word, { context: sentenceWith(c.text, word), tag: '#Cultura' }); }, 'font-size:18px;line-height:1.6');
 
   const player = new Player();
-  const listen = h('button', { type: 'button', class: 'pill', style: 'min-height:40px', disabled: !florReady() }, '▶ Escuchar a Flor');
-  player.el.onended = player.el.onpause = () => { listen.textContent = '▶ Escuchar a Flor'; };
+  const LABEL = '▶ Escuchar';
+  const listen = h('button', { type: 'button', class: 'pill', style: 'min-height:40px' }, LABEL);
+  player.el.onended = player.el.onpause = () => { listen.textContent = LABEL; };
   listen.onclick = async () => {
     if (player.playing) { player.pause(); return; }
+    if (listen.textContent.startsWith('■')) { stopPhone(); return; }
+    if (!useFlor()) { listen.textContent = '■ Parar'; await phoneSay(`${c.title}. ${c.text}`); listen.textContent = LABEL; return; }
     listen.textContent = '…';
     try {
       if (!player.el.src) player.load(await florClip(`${c.title}. ${c.text}`));
       listen.textContent = '■ Parar';
       await player.play();
-    } catch (err) { listen.textContent = '▶ Escuchar a Flor'; toast('Sin voz: ' + (err.message || err)); }
+    } catch (err) { listen.textContent = LABEL; toast('Sin voz: ' + (err.message || err)); }
   };
   const keep = h('button', { type: 'button', class: 'pill', style: 'min-height:40px' }, 'Guardar palabras');
   keep.onclick = async () => {
@@ -93,5 +97,5 @@ export async function render(main) {
     h('p', { class: 'muted small', style: 'text-align:center' }, 'Tocá cualquier palabra del texto para ver su significado y su IPA.'));
 
   log('cultura', { n });
-  return () => { player.load(null); };
+  return () => { player.load(null); stopPhone(); };
 }

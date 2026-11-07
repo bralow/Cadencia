@@ -10,6 +10,7 @@ import { transcribe } from '../ipa.js';
 import { db } from '../db.js';
 import { log } from '../progress.js';
 import { stopSpeaking, speak } from '../tts.js';
+import { useFlor, phoneSay, stopPhone } from '../voz.js';
 
 const KEY = 'cadencia.charla';
 const prefs = () => { try { return { topic: 'libre', mode: 'texto', voice: 'Aoede', autoVoice: true, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch { return { topic: 'libre', mode: 'texto', voice: 'Aoede', autoVoice: true }; } };
@@ -65,6 +66,12 @@ export async function render(main) {
   let warned = false;
   async function sayMsg(m, btn, auto) {
     if (btn) btn.textContent = '…';
+    if (!m.live && !useFlor()) { // the phone's voice: no Gemini request, starts right away
+      if (btn) btn.textContent = '■ Parar';
+      await phoneSay(m.text);
+      if (btn) btn.textContent = '▶ Repetir';
+      return;
+    }
     if (auto) { m.voicing = true; draw(); }
     try {
       if (!m.audio) { const r = await geminiSpeech(m.text, p.voice); m.audio = r.samples; m.rate = r.rate; }
@@ -87,7 +94,7 @@ export async function render(main) {
       const save = h('button', { type: 'button', class: 'pill', style: 'min-height:36px;font-size:12px;align-self:flex-start' }, 'Guardar frase');
       save.onclick = async () => { await db.put('mazo', { front: m.text, ipa: transcribe(m.text), back: '', tag: '#Charla', created: Date.now() }); toast('Guardado en el Mazo'); };
       const again = h('button', { type: 'button', class: 'pill', style: 'min-height:36px;font-size:12px' }, '▶ Repetir');
-      again.onclick = () => { unlockAudio(); if (again.textContent.startsWith('■')) { stopPcm(); again.textContent = '▶ Repetir'; } else sayMsg(m, again); };
+      again.onclick = () => { unlockAudio(); if (again.textContent.startsWith('■')) { stopPcm(); stopPhone(); again.textContent = '▶ Repetir'; } else sayMsg(m, again); };
       return h('div', { class: 'card', style: 'gap:6px;padding:12px 14px;max-width:88%;align-self:flex-start;border-bottom-left-radius:6px' },
         h('span', { class: 'kicker', style: 'font-size:10px' }, 'FLOR'), body,
         m.voicing ? h('span', { class: 'muted small' }, '🔊 preparando la voz…') : '',
@@ -190,8 +197,8 @@ export async function render(main) {
     const m = { role: 'user', text };
     msgs.push(m); draw(); scrollEnd();
     check(m);
-    if (p.autoVoice && !liveFailed) await voiceTurn(text, prior);
-    else await modelTurn();
+    if (p.autoVoice && !liveFailed && useFlor()) await voiceTurn(text, prior); // Flor's own streamed voice
+    else await modelTurn(); // written reply, read aloud by the phone when Voz automática is on
   };
   input.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send.click(); } };
 
@@ -241,5 +248,5 @@ export async function render(main) {
   main.addEventListener('pointerdown', unlockAudio, { once: true });
   showMode(); draw();
   if (p.mode === 'texto' && !msgs.length) modelTurn();
-  return () => { stopLive(); dropText(); stopSpeaking(); stopPcm(); };
+  return () => { stopLive(); dropText(); stopSpeaking(); stopPcm(); stopPhone(); };
 }
