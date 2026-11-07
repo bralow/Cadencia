@@ -1,6 +1,6 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.06-q (libros y cognados)';
+export const APP_VERSION = '2026.11.06-r (recetario)';
 import { h } from './ui.js';
 
 applyTheme();
@@ -18,6 +18,7 @@ const routes = {
   lunfardo: { tab: 'leer', load: () => import('./screens/lunfardo.js') },
   ipa: { tab: 'leer', load: () => import('./screens/ipa.js') },
   libros: { tab: 'leer', load: () => import('./screens/libros.js') },
+  recetas: { tab: 'leer', load: () => import('./screens/recetario.js') },
   mazo: { tab: 'mazo', load: () => import('./screens/mazo.js') },
   perfil: { tab: 'perfil', load: () => import('./screens/perfil.js') },
 };
