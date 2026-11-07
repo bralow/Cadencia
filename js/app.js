@@ -1,6 +1,6 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.06-u (recortar libro)';
+export const APP_VERSION = '2026.11.06-v (clave de Gemini)';
 import { h } from './ui.js';
 
 applyTheme();

@@ -5,6 +5,7 @@ import { importClipPack } from '../clippack.js';
 import { APP_VERSION } from '../app.js';
 import { getTts, setTts, VOICES, argentineAudio } from '../tts.js';
 import { Player } from '../audio.js';
+import { getGemini, setGemini, testKey } from '../gemini.js';
 
 function pillGroup(label, options, value, onPick, { cls = 'grid6', goal = false, fmt = (x) => x } = {}) {
   const btns = options.map((o) => h('button', { type: 'button', class: 'pill' + (goal ? ' goal' : ''), 'aria-pressed': String(o === value) }, fmt(o)));
@@ -53,6 +54,30 @@ export async function render(main) {
     h('h3', { style: 'font-size:15px;font-weight:700' }, 'Voz argentina'),
     h('p', { class: 'muted small', style: 'line-height:1.4' }, 'Para que Escuchar hable con acento argentino. Usa Azure (gratis hasta 500.000 caracteres por mes). Sin clave, usa la voz del teléfono.'),
     keyField, regionField, voicePills, testBtn, ttsStatus));
+
+  // Gemini (AI features)
+  const gm = getGemini();
+  const gKey = h('input', { id: 'gkey', type: 'password', value: gm.key, autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', placeholder: 'AQ.… o AIza…',
+    style: 'min-height:48px;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:15px;width:100%' });
+  const gStatus = h('p', { class: 'small', role: 'status' }, gm.key && gm.model ? `Conectado (${gm.model}).` : '');
+  const gTest = h('button', { type: 'button', class: 'btn' }, 'Guardar y probar');
+  const gRemove = h('button', { type: 'button', class: 'btn ghost', hidden: !gm.key }, 'Quitar clave');
+  gTest.onclick = async () => {
+    const k = gKey.value.trim();
+    if (!k) { gStatus.textContent = 'Pegá tu clave primero.'; return; }
+    gStatus.textContent = 'Probando con Google…';
+    try {
+      const r = await testKey(k);
+      gStatus.textContent = `¡Funciona! Modelo: ${r.model}. Gemini dijo: “${r.text}”.`;
+      gRemove.hidden = false;
+    } catch (err) { gStatus.textContent = 'No funcionó: ' + (err.message || err); }
+  };
+  gRemove.onclick = () => { setGemini({ key: '', model: '' }); gKey.value = ''; gStatus.textContent = 'Clave quitada del teléfono.'; gRemove.hidden = true; };
+  main.append(h('section', { class: 'card' },
+    h('h3', { style: 'font-size:15px;font-weight:700' }, 'Gemini (funciones con IA)'),
+    h('p', { class: 'muted small', style: 'line-height:1.4' }, 'Pegá tu clave de Google AI Studio. Queda guardada solo en este teléfono y se envía únicamente a Google. En el plan gratis, Google puede usar lo que escribas para mejorar sus productos: no compartas datos privados.'),
+    h('label', { for: 'gkey', class: 'small', style: 'font-weight:600' }, 'Clave de Gemini'), gKey,
+    h('div', { class: 'row wrap' }, gTest, gRemove), gStatus));
 
   // Clip pack import
   const count = h('span', { class: 'muted small' });
