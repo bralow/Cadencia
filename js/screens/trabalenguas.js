@@ -5,6 +5,7 @@ import { analyzeWord, transcribe } from '../ipa.js';
 import { Player, Recorder, decode, peaks } from '../audio.js';
 import { onset, speechEnd } from '../waveform.js';
 import { log } from '../progress.js';
+import { florClip, florReady } from '../florvoz.js';
 
 let current = 0, speedKey = '1';
 const WORD = /([A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+)/;
@@ -49,23 +50,42 @@ export async function render(main) {
 
   const speeds = ['0.6', '1', '1.25'];
   const speedBtns = speeds.map((k) => h('button', { type: 'button', class: 'pill', 'aria-pressed': String(k === speedKey) }, k === '1' ? '1.0x' : `${k}x`));
-  speedBtns.forEach((b, i) => { b.onclick = () => { speedKey = speeds[i]; speedBtns.forEach((x, j) => x.setAttribute('aria-pressed', String(i === j))); stopPacer(); }; });
+  speedBtns.forEach((b, i) => { b.onclick = () => { speedKey = speeds[i]; if (typeof flor !== 'undefined') flor.rate = Number(speedKey); speedBtns.forEach((x, j) => x.setAttribute('aria-pressed', String(i === j))); stopPacer(); }; });
   main.append(h('div', { class: 'between' }, h('span', { class: 'muted small', style: 'font-weight:600' }, 'Velocidad'), h('div', { class: 'row', role: 'group', 'aria-label': 'Velocidad', style: 'gap:6px' }, speedBtns)));
 
+  const florBtn = h('button', { type: 'button', class: 'round native', 'aria-label': 'Escuchar a Flor', disabled: !florReady() }, iconEl('play'));
+  const florLabel = h('span', {}, 'Flor');
   const paceBtn = h('button', { type: 'button', class: 'round native', 'aria-label': 'Seguir el ritmo' }, iconEl('play'));
   const recBtn = h('button', { type: 'button', class: 'round rec', 'aria-label': 'Grabarme con el ritmo' }, iconEl('mic'));
   const recLabel = h('span', { style: 'font-weight:700;color:var(--accent)' }, 'Grabar');
   const mineBtn = h('button', { type: 'button', class: 'round user', 'aria-label': 'Escuchar mi voz', disabled: true }, iconEl('play'));
   main.append(h('div', { class: 'controls' },
+    h('div', { class: 'control' }, florBtn, florLabel),
     h('div', { class: 'control' }, paceBtn, h('span', {}, 'Ritmo')),
     h('div', { class: 'control' }, recBtn, recLabel),
     h('div', { class: 'control' }, mineBtn, h('span', {}, 'Mi voz'))));
   const result = h('section', { class: 'card', hidden: true, 'aria-live': 'polite', style: 'gap:6px' });
   main.append(result);
-  main.append(h('p', { class: 'muted small', style: 'line-height:1.45' }, 'Ritmo resalta cada sílaba a la velocidad elegida. Grabar arranca el ritmo y te graba: al terminar te digo a cuántas sílabas por segundo fuiste.'));
+  main.append(h('p', { class: 'muted small', style: 'line-height:1.45' }, (florReady() ? 'Flor lo dice con acento porteño, a la velocidad elegida. ' : 'Con la clave de Gemini (Perfil), Flor te lo dice con acento porteño. ') + 'Ritmo resalta cada sílaba a la velocidad elegida. Grabar arranca el ritmo y te graba: al terminar te digo a cuántas sílabas por segundo fuiste.'));
 
   let lay, spans = [], timer = 0, k = 0;
-  const player = new Player(), recorder = new Recorder();
+  const player = new Player(), recorder = new Recorder(), flor = new Player();
+  flor.el.addEventListener('ended', () => florBtn.replaceChildren(iconEl('play')));
+  flor.el.addEventListener('pause', () => florBtn.replaceChildren(iconEl('play')));
+  florBtn.onclick = async () => {
+    if (flor.playing) { flor.pause(); return; }
+    stopPacer(); player.pause();
+    const t = TRABAS[current];
+    florLabel.textContent = '…'; florBtn.disabled = true;
+    try {
+      const blob = await florClip(t.text, 'Decilo con acento rioplatense de Buenos Aires, claro y bien articulado, como un trabalenguas');
+      if (TRABAS[current] !== t) return;
+      flor.load(blob); flor.rate = Number(speedKey);
+      florBtn.replaceChildren(iconEl('stop'));
+      await flor.play();
+    } catch (err) { toast('Sin voz de Flor: ' + (err.message || err)); }
+    finally { florLabel.textContent = 'Flor'; florBtn.disabled = false; }
+  };
 
   function show() {
     stopPacer();
@@ -82,7 +102,7 @@ export async function render(main) {
       return s;
     }));
     ipaEl.textContent = transcribe(t.text);
-    result.hidden = true; mineBtn.disabled = true; player.load(null);
+    result.hidden = true; mineBtn.disabled = true; player.load(null); flor.load(null);
   }
 
   function stopPacer() {
@@ -147,5 +167,5 @@ export async function render(main) {
   select.onchange = () => { current = Number(select.value); show(); };
 
   show();
-  return () => { stopPacer(); if (recorder.recording) recorder.stop(); player.load(null); };
+  return () => { stopPacer(); if (recorder.recording) recorder.stop(); player.load(null); flor.load(null); };
 }
