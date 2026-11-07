@@ -3,6 +3,7 @@
 //  audio: { id, blob }                   (clip audio, same id as clips)
 //  mazo:  { id (auto), front, ipa, back, tag, audio?: Blob, created }
 //  tts:   { id: 'voice|text', blob }      (cached Argentine voice audio)
+//  diario: { id, at, blob, seconds, prompt, result }  (voice diary entries)
 //  books: { id, title, stories: [{ title, paragraphs }], added }  (imported from the user's own PDFs)
 const DB_NAME = 'cadencia';
 let dbPromise;
@@ -10,7 +11,7 @@ let dbPromise;
 function open() {
   if (!dbPromise) {
     dbPromise = new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB_NAME, 3);
+      const req = indexedDB.open(DB_NAME, 4);
       req.onupgradeneeded = () => {
         const db = req.result;
         if (!db.objectStoreNames.contains('clips')) {
@@ -20,6 +21,7 @@ function open() {
         if (!db.objectStoreNames.contains('audio')) db.createObjectStore('audio', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('books')) db.createObjectStore('books', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('tts')) db.createObjectStore('tts', { keyPath: 'id' });
+        if (!db.objectStoreNames.contains('diario')) db.createObjectStore('diario', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('mazo')) db.createObjectStore('mazo', { keyPath: 'id', autoIncrement: true });
       };
       req.onsuccess = () => resolve(req.result);

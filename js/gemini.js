@@ -89,7 +89,7 @@ export async function ask({ system, turns, json = false, temperature = 0.7, fast
   const s = getGemini();
   if (!s.key || !s.model) throw new Error('Falta la clave de Gemini (Perfil → Gemini).');
   const payload = {
-    contents: turns.map((t) => ({ role: t.role, parts: [{ text: t.text }] })),
+    contents: turns.map((t) => ({ role: t.role, parts: t.parts || [{ text: t.text }] })), // parts: text plus audio, etc.
     generationConfig: { temperature, ...(json ? { responseMimeType: 'application/json' } : {}) },
   };
   if (system) payload.systemInstruction = { parts: [{ text: system }] };

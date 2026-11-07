@@ -1,6 +1,6 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.07-e (trabalenguas con Flor)';
+export const APP_VERSION = '2026.11.07-f (diario de voz)';
 import { h } from './ui.js';
 
 applyTheme();
@@ -11,6 +11,7 @@ const routes = {
   vos: { tab: 'practicar', load: () => import('./screens/vos.js') },
   charla: { tab: 'practicar', load: () => import('./screens/charla.js') },
   escribir: { tab: 'practicar', load: () => import('./screens/escribir.js') },
+  diario: { tab: 'practicar', load: () => import('./screens/diario.js') },
   oido: { tab: 'practicar', load: () => import('./screens/oido.js') },
   trabalenguas: { tab: 'practicar', load: () => import('./screens/trabalenguas.js') },
   elision: { tab: 'practicar', load: () => import('./screens/elision.js') },
