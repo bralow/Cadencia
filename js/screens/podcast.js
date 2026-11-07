@@ -24,7 +24,7 @@ export async function render(main) {
   return listView(main, eps);
 }
 
-function importCard() {
+export function importCard() {
   const status = h('p', { class: 'small', role: 'status' });
   const input = h('input', { type: 'file', accept: '.zip,application/zip,application/x-zip-compressed,application/x-zip,application/octet-stream', id: 'podpack', hidden: true });
   const btn = h('label', { for: 'podpack', class: 'btn', role: 'button', tabindex: '0' }, 'Importar paquete');
@@ -35,7 +35,7 @@ function importCard() {
     try {
       await persist();
       const r = await importPack(file, (d, t) => { status.textContent = `Importando… ${d} de ${t}`; });
-      toast(r.kind === 'podcast' ? `${r.n} episodios importados` : `${r.n} clips importados`);
+      toast(r.kind === 'podcast' ? `${r.n} episodios importados` : r.kind === 'songs' ? `${r.n} canciones importadas` : `${r.n} clips importados`);
       window.dispatchEvent(new Event('cadencia:rerender'));
     } catch (err) { status.textContent = 'No se pudo importar: ' + (err.message || err); }
     input.value = '';

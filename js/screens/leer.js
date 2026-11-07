@@ -14,6 +14,7 @@ export function readTabs(active) {
     active === 'libros' ? h('span', { class: 'on', 'aria-current': 'page' }, 'Libros') : h('a', { href: '#/libros' }, 'Libros'),
     active === 'recetas' ? h('span', { class: 'on', 'aria-current': 'page' }, 'Recetas') : h('a', { href: '#/recetas' }, 'Recetas'),
     active === 'podcast' ? h('span', { class: 'on', 'aria-current': 'page' }, 'Podcast') : h('a', { href: '#/podcast' }, 'Podcast'),
+    active === 'canciones' ? h('span', { class: 'on', 'aria-current': 'page' }, 'Canciones') : h('a', { href: '#/canciones' }, 'Canciones'),
     active === 'ipa' ? h('span', { class: 'on', 'aria-current': 'page' }, 'IPA') : h('a', { href: '#/ipa' }, 'IPA'));
   requestAnimationFrame(() => { const on = el.querySelector('.on'); if (on) on.scrollIntoView({ inline: 'center', block: 'nearest' }); });
   return el;

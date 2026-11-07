@@ -1,6 +1,6 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.07-l (podcast)';
+export const APP_VERSION = '2026.11.07-m (canciones)';
 import { h } from './ui.js';
 
 applyTheme();
@@ -22,6 +22,7 @@ const routes = {
   leer: { tab: 'leer', load: () => import('./screens/leer.js') },
   lunfardo: { tab: 'leer', load: () => import('./screens/lunfardo.js') },
   podcast: { tab: 'leer', load: () => import('./screens/podcast.js') },
+  canciones: { tab: 'leer', load: () => import('./screens/canciones.js') },
   ipa: { tab: 'leer', load: () => import('./screens/ipa.js') },
   libros: { tab: 'leer', load: () => import('./screens/libros.js') },
   recetas: { tab: 'leer', load: () => import('./screens/recetario.js') },

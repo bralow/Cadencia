@@ -5,6 +5,7 @@ import { readZip, importClipPack } from './clippack.js';
 
 export async function importPack(file, onProgress = () => {}) {
   const zip = await readZip(file);
+  if (zip.names.includes('canciones.json')) return importSongs(zip, onProgress);
   if (!zip.names.includes('podcast.json')) return { kind: 'clips', n: await importClipPack(file, onProgress) };
   const m = JSON.parse(new TextDecoder().decode(await zip.get('podcast.json')));
   const eps = m.episodes || [];
@@ -18,6 +19,21 @@ export async function importPack(file, onProgress = () => {}) {
     onProgress(++done, eps.length);
   }
   return { kind: 'podcast', n: done, show: m.show, pack: m.pack, packs: m.packs };
+}
+
+// Song packs (tools/prepare_songs.py): canciones.json + audio/*.ogg.
+async function importSongs(zip, onProgress) {
+  const m = JSON.parse(new TextDecoder().decode(await zip.get('canciones.json')));
+  const list = m.songs || [];
+  let done = 0;
+  for (const s of list) {
+    const bytes = await zip.get(s.file);
+    if (!bytes) continue;
+    await db.put('songs', { id: `${m.show || 'Canciones'}|${s.id}`, show: m.show || 'Canciones', title: s.title, n: s.n, duration: s.duration,
+      blob: new Blob([bytes.slice()], { type: 'audio/ogg' }) });
+    onProgress(++done, list.length);
+  }
+  return { kind: 'songs', n: done, show: m.show, pack: m.pack, packs: m.packs };
 }
 
 // Where you stopped in each episode, and which ones you finished.

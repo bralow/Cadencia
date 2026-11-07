@@ -126,6 +126,7 @@ export async function render(main) {
       await persist();
       const r = await importPack(file, (d, t) => { status.textContent = `Importando… ${d} de ${t}`; });
       if (r.kind === 'podcast') { status.textContent = `Listo: ${r.n} episodios de ${r.show}${r.packs > 1 ? ` (paquete ${r.pack} de ${r.packs})` : ''}. Están en Leer → Podcast.`; toast('Episodios importados'); }
+      else if (r.kind === 'songs') { status.textContent = `Listo: ${r.n} canciones de ${r.show}. Están en Leer → Canciones.`; toast('Canciones importadas'); }
       else { status.textContent = `Listo: ${r.n} clips importados.`; toast('Clips importados'); }
     } catch (err) {
       status.textContent = 'No se pudo importar: ' + (err.message || err);
