@@ -52,7 +52,30 @@ function swapInWords(text, c, r, letters, startOnly) {
   return out;
 }
 
+// A common case with an exact answer: text typed in Windows (cp1252) and stored in a PDF font
+// that reads it as Mac Roman. Then á shows as ·, ó as Û, ñ as Ò, ¿ as ø, the long dash as ó, the
+// quotes as ì î, "…" as Ö. Each symbol maps back exactly.
+const MAC_TO_WIN = {"Ä": "€", "Ç": "‚", "É": "ƒ", "Ñ": "„", "Ö": "…", "Ü": "†", "á": "‡", "à": "ˆ", "â": "‰", "ä": "Š", "ã": "‹", "å": "Œ", "é": "Ž", "ë": "‘", "í": "’", "ì": "“", "î": "”", "ï": "•", "ñ": "–", "ó": "—", "ò": "˜", "ô": "™", "ö": "š", "õ": "›", "ú": "œ", "û": "ž", "ü": "Ÿ", "†": " ", "°": "¡", "§": "¤", "•": "¥", "¶": "¦", "ß": "§", "®": "¨", "™": "ª", "´": "«", "¨": "¬", "≠": "­", "Æ": "®", "Ø": "¯", "∞": "°", "≤": "²", "≥": "³", "¥": "´", "∂": "¶", "∑": "·", "∏": "¸", "π": "¹", "∫": "º", "ª": "»", "º": "¼", "Ω": "½", "æ": "¾", "ø": "¿", "¿": "À", "¡": "Á", "¬": "Â", "√": "Ã", "ƒ": "Ä", "≈": "Å", "∆": "Æ", "«": "Ç", "»": "È", "…": "É", " ": "Ê", "À": "Ë", "Ã": "Ì", "Õ": "Í", "Œ": "Î", "œ": "Ï", "–": "Ð", "—": "Ñ", "“": "Ò", "”": "Ó", "‘": "Ô", "’": "Õ", "÷": "Ö", "◊": "×", "ÿ": "Ø", "Ÿ": "Ù", "⁄": "Ú", "€": "Û", "‹": "Ü", "›": "Ý", "ﬁ": "Þ", "ﬂ": "ß", "‡": "à", "·": "á", "‚": "â", "„": "ã", "‰": "ä", "Â": "å", "Ê": "æ", "Á": "ç", "Ë": "è", "È": "é", "Í": "ê", "Î": "ë", "Ï": "ì", "Ì": "í", "Ó": "î", "Ô": "ï", "": "ð", "Ò": "ñ", "Ú": "ò", "Û": "ó", "Ù": "ô", "ı": "õ", "ˆ": "ö", "˜": "÷", "¯": "ø", "˘": "ù", "˙": "ú", "˚": "û", "¸": "ü", "˝": "ý", "˛": "þ", "ˇ": "ÿ"};
+const SPANISH = /[áéíóúñüÁÉÍÓÚÑÜ¿¡“”‘’…—–«»\u00a0]/;
+function macRomanFix(text) {
+  const odd = [...text].filter((c) => c.charCodeAt(0) > 127);
+  if (odd.length < 20) return null;
+  const share = (chars) => chars.filter((c) => SPANISH.test(c)).length / chars.length;
+  const after = odd.map((c) => MAC_TO_WIN[c] || c);
+  const before = share(odd), now = share(after);
+  if (!(now >= 0.9 && now - before >= 0.3)) return null;
+  const counts = new Map();
+  for (const c of odd) if (MAC_TO_WIN[c]) counts.set(c, (counts.get(c) || 0) + 1);
+  const map = [...counts.entries()].sort((a, b) => b[1] - a[1])
+    .map(([from, count]) => ({ from, to: MAC_TO_WIN[from] === '\u00a0' ? '(espacio)' : MAC_TO_WIN[from], count }));
+  const fix = (t) => t.replace(/[^\x00-\x7f]/g, (c) => MAC_TO_WIN[c] || c).replace(/\u00a0/g, ' ').replace(/ {2,}/g, ' ');
+  return { map, fix };
+}
+
 export function inferFix(text) {
+  const exact = macRomanFix(text);
+  if (exact) return exact;
+
   // 1. Candidates: unusual characters that sit right next to letters.
   const touching = new Map();
   for (let i = 0; i < text.length; i++) {

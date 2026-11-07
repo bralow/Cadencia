@@ -3,7 +3,7 @@
 // (cache-busting query, so GitHub's CDN can't hand back a stale copy). The app then runs
 // entirely from that snapshot, so old and new files can never mix. When sw.js changes,
 // the browser installs the new snapshot, swaps it in, and the page reloads once.
-const VERSION = '2026.11.07-i';
+const VERSION = '2026.11.07-j';
 const CACHE = 'cadencia-' + VERSION;
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',

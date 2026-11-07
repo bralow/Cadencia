@@ -1,6 +1,6 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.07-i (traducir relatos)';
+export const APP_VERSION = '2026.11.07-j (libro: relatos y guiones)';
 import { h } from './ui.js';
 
 applyTheme();

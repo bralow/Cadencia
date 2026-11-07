@@ -33,6 +33,35 @@ export async function render(main) {
   return libraryView(main, books);
 }
 
+// The same book imported before: same title, or mostly the same words (even if the file was renamed).
+function sameBook(books, book) {
+  const vocab = (b) => new Set(b.stories.flatMap((st) => st.paragraphs.join(' ').toLowerCase().match(/[a-záéíóúñü]{5,}/g) || []).slice(0, 20000));
+  const mine = vocab(book);
+  return books.find((b) => b.title.toLowerCase() === book.title.toLowerCase())
+    || books.find((b) => { const v = vocab(b); let n = 0; for (const w of v) if (mine.has(w)) n++; return n / Math.max(1, Math.min(v.size, mine.size)) > 0.6; });
+}
+
+// A re-import of a book already on the phone: keep its id, page range, read marks and notes.
+function replaceBook(old, book) {
+  const pages = old.stories.map((st) => st.page).filter((x) => typeof x === 'number');
+  if (pages.length) {
+    const lo = Math.min(...pages), hi = Math.max(...pages);
+    book.stories = book.stories.filter((st) => typeof st.page !== 'number' || (st.page >= lo && st.page <= hi));
+  }
+  const byPage = (list) => { const m = new Map(); list.forEach((i) => { const st = old.stories[i]; if (st && typeof st.page === 'number') m.set(st.page, i); }); return m; };
+  const reads = load(READ_KEY), notes = load(NOTES_KEY);
+  const readPages = new Set((reads[old.id] || []).map((i) => old.stories[i] && old.stories[i].page));
+  const noteFor = byPage(Object.keys(notes[old.id] || {}).map(Number));
+  const newReads = [], newNotes = {};
+  book.stories.forEach((st, i) => {
+    if (readPages.has(st.page)) newReads.push(i);
+    if (noteFor.has(st.page)) newNotes[i] = notes[old.id][noteFor.get(st.page)];
+  });
+  book.id = old.id; book.title = old.title;
+  reads[old.id] = newReads; notes[old.id] = newNotes;
+  save(READ_KEY, reads); save(NOTES_KEY, notes);
+}
+
 function importCard(main) {
   const status = h('p', { class: 'small', role: 'status' });
   const input = h('input', { type: 'file', accept: '.pdf,application/pdf', id: 'pdf' });
@@ -45,6 +74,10 @@ function importCard(main) {
       await persist();
       const book = await importPdf(file, (n, t) => { status.textContent = `Leyendo página ${n} de ${t}…`; });
       if (!book.stories.length) throw new Error('No encontré texto para leer.');
+      const old = sameBook(await db.all('books'), book);
+      if (old && window.confirm(`Ya tenés «${old.title}». ¿Reemplazarlo por esta versión? Se conservan el recorte de páginas, los relatos leídos y tus notas.`)) {
+        replaceBook(old, book);
+      }
       await db.put('books', book);
       openBook = book.id; openStory = null;
       toast(`${book.stories.length} relatos importados`);
@@ -74,7 +107,7 @@ function bookView(main, book, count) {
   const header = h('div', { style: 'display:flex;flex-direction:column;gap:4px' },
     h('h1', { style: 'font-size:26px' }, book.title),
     h('span', { class: 'muted small' }, `${read.size} de ${book.stories.length} relatos leídos`),
-    book.charMap && book.charMap.length ? h('span', { class: 'muted small' }, 'Letras arregladas: ' + book.charMap.map((m) => `${m.from} → ${m.to}`).join(' · ')) : '');
+    book.charMap && book.charMap.length ? h('span', { class: 'muted small' }, 'Letras arregladas: ' + book.charMap.slice(0, 6).map((m) => `${m.from} → ${m.to}`).join(' · ') + (book.charMap.length > 6 ? ` y ${book.charMap.length - 6} más` : '')) : '');
   const progress = h('div', { class: 'progress' }, h('div', { style: `width:${(read.size / book.stories.length) * 100}%` }));
   const search = h('input', { type: 'search', placeholder: 'Buscar un relato…', 'aria-label': 'Buscar un relato', autocomplete: 'off',
     style: 'min-height:48px;padding:0 16px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-size:16px;width:100%' });
