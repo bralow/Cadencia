@@ -3,10 +3,13 @@ import { readTabs } from './leer.js';
 import { SOUNDS, CONFUSABLE, WORDS } from '../ipadata.js';
 import { transcribe } from '../ipa.js';
 import { log, discover, TRACKED } from '../progress.js';
+import { mouthSVG, describe } from '../boca.js';
+import { steps } from '../transform.js';
+import { phoneSay, stopPhone } from '../voz.js';
 
 let mode = 'simbolos';
 const soundIds = (w) => { const ipa = transcribe(w); return TRACKED.filter((s) => s.match(ipa)).map((s) => s.id); };
-const MODES = [['simbolos', 'Símbolos'], ['descifrar', 'Descifrar'], ['escribir', 'Escribir']];
+const MODES = [['simbolos', 'Símbolos'], ['transformar', 'Transformar'], ['descifrar', 'Descifrar'], ['escribir', 'Escribir']];
 
 // IPA string -> list of sound tokens (tʃ is one token), without brackets, stress or dots.
 function tokens(ipa) {
@@ -49,7 +52,14 @@ function soundboard(root) {
             h('span', { style: 'font-family:var(--display);font-size:22px;font-weight:700' }, x.name),
             x.ar ? h('span', { class: 'chip', style: 'background:var(--accent);color:var(--accent-ink)' }, 'RIOPLATENSE') : ''),
           h('p', { style: 'font-size:15px;line-height:1.45' }, x.how),
-          h('div', { style: 'background:var(--surface);color:var(--ink);border-radius:14px;padding:4px 14px' }, x.ex.map((w) => highlight(w, x.s))));
+          mouth(x.s),
+          h('div', { style: 'background:var(--surface);color:var(--ink);border-radius:14px;padding:4px 14px' }, x.ex.map((w) => {
+            const row = highlight(w, x.s);
+            row.style.cursor = 'pointer'; row.title = 'Tocá para escucharla';
+            row.onclick = () => phoneSay(w);
+            return row;
+          })),
+          h('p', { class: 'small', style: 'opacity:.8' }, 'Tocá un ejemplo para escucharlo.'));
         detail.hidden = false;
         detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       };
@@ -57,6 +67,59 @@ function soundboard(root) {
     })));
   }
   root.append(detail);
+}
+
+// Side view of the mouth for one sound, with what to notice.
+function mouth(symbol) {
+  const d = describe(symbol);
+  if (!d) return '';
+  const fact = (k, v) => h('div', { style: 'display:flex;flex-direction:column' }, h('span', { style: 'font-size:10px;font-weight:700;letter-spacing:.08em;opacity:.75' }, k), h('span', { style: 'font-size:13px;line-height:1.3' }, v));
+  return h('div', { style: 'background:var(--surface);color:var(--ink);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:8px' },
+    h('div', { html: mouthSVG(symbol) }),
+    h('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:8px' },
+      fact('DÓNDE', d.place), fact('CÓMO', d.manner),
+      fact('CUERDAS VOCALES', d.voice ? 'vibran (zigzag)' : 'no vibran'), fact('AIRE', d.nasal ? 'por la nariz (velo bajo)' : 'por la boca (velo arriba)')));
+}
+
+// Transformar: watch a word or phrase become porteño, one rule at a time.
+function transformer(root) {
+  const input = h('input', { type: 'text', value: 'Las llaves del barco están en el bolsillo', 'aria-label': 'Palabra o frase', autocomplete: 'off', lang: 'es-AR',
+    style: 'min-height:48px;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-size:17px;width:100%' });
+  const go = h('button', { type: 'button', class: 'btn' }, 'Transformar');
+  const listen = h('button', { type: 'button', class: 'pill', style: 'min-height:44px' }, '▶ Escuchar');
+  const out = h('div', { style: 'display:flex;flex-direction:column;gap:10px' });
+  const EXAMPLES = ['yo me llamo Guillermo', 'los chicos están en la playa', 'un vaso de agua', 'desde ayer', 'mis amigos'];
+  const chips = EXAMPLES.map((e) => { const b = h('button', { type: 'button', class: 'pill', style: 'min-height:34px;font-size:12px' }, e); b.onclick = () => { input.value = e; run(); }; return b; });
+  root.append(h('p', { class: 'muted small', style: 'line-height:1.45' }, 'Escribí una palabra o una frase y mirá cómo se convierte, regla por regla, en cómo suena en Buenos Aires.'),
+    h('section', { class: 'card', style: 'gap:10px' }, input, h('div', { class: 'row wrap', style: 'gap:6px' }, chips), h('div', { class: 'row', style: 'gap:8px' }, go, listen)), out);
+  function ipaLine(text, marks) {
+    const p = h('p', { class: 'ipa', style: 'font-size:22px;line-height:1.5;color:var(--ink);word-break:break-word' });
+    [...text].forEach((c, i) => p.append(marks && marks[i] && c.trim() ? h('b', { style: 'color:var(--accent);background:color-mix(in srgb, var(--accent) 16%, transparent);border-radius:4px' }, c) : c));
+    return p;
+  }
+  function run() {
+    const text = input.value.trim();
+    if (!/[a-záéíóúüñ]/i.test(text)) { out.replaceChildren(); return; }
+    const r = steps(text);
+    let n = 0;
+    out.replaceChildren(
+      h('section', { class: 'card', style: 'gap:6px' }, h('span', { class: 'kicker' }, 'ESCRITO'),
+        h('p', { style: 'font-size:20px;font-family:var(--display)' }, text),
+        h('p', { class: 'muted small' }, 'Sílabas (en mayúscula, la que lleva el acento): ', h('b', {}, r.spelled))),
+      ...r.steps.map((st) => {
+        const num = st.applies ? ++n : null;
+        return h('section', { class: 'card', style: `gap:6px;${st.applies ? '' : 'opacity:.55'}` },
+          h('div', { class: 'between' }, h('span', { class: 'kicker' }, `${num ? `${num}. ` : ''}${st.title.toUpperCase()}`), st.applies ? '' : h('span', { class: 'muted small' }, 'no se aplica acá')),
+          st.applies ? ipaLine(st.ipa, st.marks) : '',
+          h('p', { class: 'small', style: 'line-height:1.45' }, st.explain));
+      }),
+      h('section', { class: 'hero', style: 'gap:6px' }, h('span', { class: 'kicker' }, 'ASÍ SUENA EN BUENOS AIRES'), h('p', { class: 'ipa', style: 'font-size:24px;color:var(--gold)' }, r.final)));
+    log('transformar', { words: text.split(/\s+/).length });
+  }
+  go.onclick = run;
+  input.onkeydown = (e) => { if (e.key === 'Enter') run(); };
+  listen.onclick = () => { if (input.value.trim()) phoneSay(input.value.trim()); };
+  run();
 }
 
 function decodeGame(root) {
@@ -164,10 +227,12 @@ export async function render(main) {
   const tabs = MODES.map(([k, label]) => h('button', { type: 'button', class: 'pill', 'aria-pressed': String(k === mode) }, label));
   const body = h('div', { style: 'display:flex;flex-direction:column;gap:12px' });
   tabs.forEach((b, i) => { b.onclick = () => { mode = MODES[i][0]; tabs.forEach((x, j) => x.setAttribute('aria-pressed', String(i === j))); draw(); }; });
-  main.append(h('div', { class: 'row', role: 'group', 'aria-label': 'Modo' }, tabs), body);
+  main.append(h('div', { class: 'seg scroll', role: 'group', 'aria-label': 'Modo' }, tabs), body);
   function draw() {
     body.replaceChildren();
+    stopPhone();
     if (mode === 'simbolos') soundboard(body);
+    else if (mode === 'transformar') transformer(body);
     else if (mode === 'descifrar') decodeGame(body);
     else encodeGame(body);
   }

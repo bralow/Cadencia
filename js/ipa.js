@@ -13,7 +13,8 @@ const LENITE = { b: 'β', d: 'ð', g: 'ɣ' };
 const isVowelChar = (c) => VOWEL_CHARS.has(c);
 
 // Turn one lowercase word into segments: { p, v (vowel), acc (written accent), src (spelling) }.
-function segment(word) {
+function segment(word, sheismo = true) {
+  const SH = sheismo ? 'ʃ' : 'ʝ'; // Buenos Aires [ʃ]; most of the Spanish-speaking world [ʝ]
   const out = [];
   let pending = '';
   const push = (p, v, src, acc = false) => { out.push({ p, v, acc, src: pending + src }); pending = ''; };
@@ -30,7 +31,7 @@ function segment(word) {
         else push('k', false, c);
         break;
       case 'l':
-        if (n === 'l') { push('ʃ', false, 'll'); i++; } else push('l', false, c);
+        if (n === 'l') { push(SH, false, 'll'); i++; } else push('l', false, c);
         break;
       case 'r':
         if (n === 'r') { push('r', false, 'rr'); i++; }
@@ -47,7 +48,7 @@ function segment(word) {
         break;
       case 'j': push('x', false, c); break;
       case 'h':
-        if (i === 0 && n === 'i' && isVowelChar(nn)) { push('ʃ', false, 'hi'); i++; } // hielo, hierba
+        if (i === 0 && n === 'i' && isVowelChar(nn)) { push(SH, false, 'hi'); i++; } // hielo, hierba
         else pending += c; // silent
         break;
       case 'ñ': push('ɲ', false, c); break;
@@ -56,7 +57,7 @@ function segment(word) {
       case 'x': push('k', false, ''); push('s', false, c); break;
       case 'y':
         if (word === 'y') push('i', true, c);
-        else if (isVowelChar(n)) push('ʃ', false, c);
+        else if (isVowelChar(n)) push(SH, false, c);
         else push('i', true, c);
         break;
       case 'w': push('w', false, c); break;
@@ -147,8 +148,11 @@ export function analyzeWord(raw) {
   };
 }
 
-// Transcribe a phrase or passage.
-export function transcribe(text) {
+// Transcribe a phrase or passage. opts turns individual Rioplatense rules off (all on by default):
+// sheismo (ll/y → ʃ), aspira (s → h before consonants), suaves (b d g → β ð ɣ), nasal (n assimilation),
+// enlace (final consonant joins the next word's vowel).
+export function transcribe(text, opts = {}) {
+  const o = { sheismo: true, aspira: true, suaves: true, nasal: true, enlace: true, ...opts };
   // Tokenize into words and pause marks.
   const tokens = [];
   const re = /([a-záéíóúüñA-ZÁÉÍÓÚÜÑ]+)|([,;:])|([.!?¡¿…])/g;
@@ -164,7 +168,7 @@ export function transcribe(text) {
   let cur = { words: [], pause: null };
   for (const t of tokens) {
     if (t.word) {
-      const syls = syllabify(segment(t.word));
+      const syls = syllabify(segment(t.word, o.sheismo));
       const st = stressIndex(t.word, syls);
       cur.words.push({ syls, stress: st, n: syls.length });
     } else if (cur.words.length) {
@@ -184,16 +188,16 @@ export function transcribe(text) {
       const s = flat[i].seg;
       if (s.v) continue;
       const next = flat[i + 1] ? flat[i + 1].seg : null;
-      if (s.p === 'n' && next && !next.v) {
+      if (o.nasal && s.p === 'n' && next && !next.v) {
         if (['p', 'b', 'm'].includes(next.p)) s.out = 'm';
         else if (['k', 'g', 'x'].includes(next.p)) s.out = 'ŋ';
         else if (next.p === 'f') s.out = 'ɱ';
       }
-      if (s.p === 's' && next && !next.v) s.out = 'h';
+      if (o.aspira && s.p === 's' && next && !next.v) s.out = 'h';
     }
     for (let i = 0; i < flat.length; i++) {
       const s = flat[i].seg;
-      if (!LENITE[s.p]) continue;
+      if (!o.suaves || !LENITE[s.p]) continue;
       const prev = i > 0 ? flat[i - 1].seg : null;
       const prevOut = prev ? (prev.out || segIpa(prev)) : null;
       const stop = !prev || NASALS.has(prevOut) || (s.p === 'd' && prevOut === 'l');
@@ -201,7 +205,7 @@ export function transcribe(text) {
     }
 
     // Resyllabify: final consonant + next word starting with a vowel.
-    for (let wi = 0; wi < g.words.length - 1; wi++) {
+    for (let wi = 0; o.enlace && wi < g.words.length - 1; wi++) {
       const a = g.words[wi], b = g.words[wi + 1];
       const lastSyl = a.syls[a.syls.length - 1];
       const tail = lastSyl.segs[lastSyl.segs.length - 1];
