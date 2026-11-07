@@ -1,6 +1,6 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.07-k (transformar y boca)';
+export const APP_VERSION = '2026.11.07-l (podcast)';
 import { h } from './ui.js';
 
 applyTheme();
@@ -21,6 +21,7 @@ const routes = {
   progreso: { tab: 'hoy', load: () => import('./screens/progreso.js') },
   leer: { tab: 'leer', load: () => import('./screens/leer.js') },
   lunfardo: { tab: 'leer', load: () => import('./screens/lunfardo.js') },
+  podcast: { tab: 'leer', load: () => import('./screens/podcast.js') },
   ipa: { tab: 'leer', load: () => import('./screens/ipa.js') },
   libros: { tab: 'leer', load: () => import('./screens/libros.js') },
   recetas: { tab: 'leer', load: () => import('./screens/recetario.js') },

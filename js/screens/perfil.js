@@ -2,7 +2,7 @@ import { h, toast, LEVELS } from '../ui.js';
 import { getVoz, setVoz, listVoices, spanish, pickVoice, phoneSay } from '../voz.js';
 import { getSettings, setSetting } from '../settings.js';
 import { db, persist } from '../db.js';
-import { importClipPack } from '../clippack.js';
+import { importPack } from '../podcast.js';
 import { APP_VERSION } from '../app.js';
 import { getTts, setTts, VOICES, argentineAudio } from '../tts.js';
 import { Player } from '../audio.js';
@@ -115,7 +115,7 @@ export async function render(main) {
   const status = h('p', { class: 'small', role: 'status' });
   const refresh = async () => { const n = await db.count('clips'); count.textContent = n ? `${n} clips en el teléfono` : 'Todavía no hay clips'; };
   const input = h('input', { type: 'file', accept: '.zip,application/zip,application/x-zip-compressed,application/x-zip,application/octet-stream', id: 'pack' });
-  const importBtn = h('label', { for: 'pack', class: 'btn', role: 'button', tabindex: '0' }, 'Importar paquete de clips');
+  const importBtn = h('label', { for: 'pack', class: 'btn', role: 'button', tabindex: '0' }, 'Importar paquete');
   importBtn.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); } };
   input.onchange = async () => {
     const file = input.files[0];
@@ -124,9 +124,9 @@ export async function render(main) {
     status.textContent = 'Leyendo el paquete…';
     try {
       await persist();
-      const n = await importClipPack(file, (d, t) => { status.textContent = `Importando… ${d} de ${t}`; });
-      status.textContent = `Listo: ${n} clips importados.`;
-      toast('Clips importados');
+      const r = await importPack(file, (d, t) => { status.textContent = `Importando… ${d} de ${t}`; });
+      if (r.kind === 'podcast') { status.textContent = `Listo: ${r.n} episodios de ${r.show}${r.packs > 1 ? ` (paquete ${r.pack} de ${r.packs})` : ''}. Están en Leer → Podcast.`; toast('Episodios importados'); }
+      else { status.textContent = `Listo: ${r.n} clips importados.`; toast('Clips importados'); }
     } catch (err) {
       status.textContent = 'No se pudo importar: ' + (err.message || err);
     }
