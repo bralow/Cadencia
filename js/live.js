@@ -35,10 +35,14 @@ export class LiveSession {
     const { key } = getGemini();
     if (!key) throw new Error('Falta la clave de Gemini (Perfil → Gemini).');
     this.stopped = false;
+    // Created before any await, while we're still inside the user's tap: Android only lets a page
+    // start sound from a gesture, and a context made later stays muted.
+    this.outCtx = new AudioContext({ sampleRate: 24000 });
+    this.outCtx.resume().catch(() => {});
+    this.turnAudio = [];
     // Mic first, so the permission prompt comes before connecting.
     this.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } });
     this.inCtx = new AudioContext({ sampleRate: 16000 });
-    this.outCtx = new AudioContext({ sampleRate: 24000 });
     this.nextAt = 0;
     const url = URL.createObjectURL(new Blob([WORKLET], { type: 'text/javascript' }));
     await this.inCtx.audioWorklet.addModule(url);
@@ -105,7 +109,11 @@ export class LiveSession {
     for (const p of parts) {
       if (p.inlineData && /audio\/pcm/.test(p.inlineData.mimeType || '')) this.play(p.inlineData.data, p.inlineData.mimeType);
     }
-    if (sc.turnComplete) this.h.onTurnComplete();
+    if (sc.turnComplete) {
+      const audio = this.turnAudio.length ? this.turnAudio : null;
+      this.turnAudio = [];
+      this.h.onTurnComplete(audio);
+    }
   }
 
   play(data, mime) {
@@ -114,6 +122,9 @@ export class LiveSession {
     const buf = this.outCtx.createBuffer(1, pcm.length, rate);
     const ch = buf.getChannelData(0);
     for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 0x8000;
+    this.turnAudio.push(ch.slice());
+    this.rate = rate;
+    if (this.outCtx.state === 'suspended') this.outCtx.resume().catch(() => {});
     const node = this.outCtx.createBufferSource();
     node.buffer = buf; node.connect(this.outCtx.destination);
     const at = Math.max(this.outCtx.currentTime + 0.03, this.nextAt);
@@ -123,7 +134,7 @@ export class LiveSession {
     node.onended = () => { this.playing.delete(node); if (!this.playing.size) this.h.onSpeaking(false); };
   }
 
-  flush() { for (const n of this.playing) { try { n.stop(); } catch { /* already stopped */ } } this.playing.clear(); this.nextAt = 0; this.h.onSpeaking(false); }
+  flush() { this.turnAudio = []; for (const n of this.playing) { try { n.stop(); } catch { /* already stopped */ } } this.playing.clear(); this.nextAt = 0; this.h.onSpeaking(false); }
 
   sendText(text) {
     if (this.ws && this.ws.readyState === 1) this.ws.send(JSON.stringify({ clientContent: { turns: [{ role: 'user', parts: [{ text }] }], turnComplete: true } }));

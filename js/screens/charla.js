@@ -2,16 +2,17 @@ import { h, toast } from '../ui.js';
 import { practiceTabs } from './sombra.js';
 import { TOPICS, persona, reply, corrections } from '../charla.js';
 import { LiveSession, VOICES } from '../live.js';
-import { geminiReady } from '../gemini.js';
+import { geminiReady, geminiSpeech } from '../gemini.js';
+import { unlockAudio, playPcm, stopPcm, concat } from '../pcm.js';
 import { getSettings } from '../settings.js';
 import { tappableText, markWord, showWordPanel, sentenceWith } from '../wordpanel.js';
 import { transcribe } from '../ipa.js';
 import { db } from '../db.js';
 import { log } from '../progress.js';
-import { stopSpeaking } from '../tts.js';
+import { stopSpeaking, speak } from '../tts.js';
 
 const KEY = 'cadencia.charla';
-const prefs = () => { try { return { topic: 'libre', mode: 'texto', voice: 'Aoede', ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch { return { topic: 'libre', mode: 'texto', voice: 'Aoede' }; } };
+const prefs = () => { try { return { topic: 'libre', mode: 'texto', voice: 'Aoede', autoVoice: true, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch { return { topic: 'libre', mode: 'texto', voice: 'Aoede', autoVoice: true }; } };
 const setPref = (p) => { const v = { ...prefs(), ...p }; try { localStorage.setItem(KEY, JSON.stringify(v)); } catch { /* ignore */ } return v; };
 let msgs = []; // { role: 'user'|'model', text, corr?: [], pending?: bool }
 let live = null;
@@ -33,9 +34,13 @@ export async function render(main) {
   topicSel.value = p.topic;
   const modeBtns = [['texto', 'Texto'], ['voz', 'Voz en vivo']].map(([k, l]) => h('button', { type: 'button', class: 'pill', style: 'min-height:38px;border:none', 'aria-pressed': String(p.mode === k) }, l));
   const newBtn = h('button', { type: 'button', class: 'pill', style: 'min-height:44px' }, 'Nueva charla');
+  const voiceSel = h('select', { 'aria-label': 'Voz de Flor', style: 'min-height:40px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:0 10px;font-size:14px' }, VOICES.map((v) => h('option', { value: v }, v)));
+  voiceSel.value = p.voice;
+  const autoBtn = h('button', { type: 'button', class: 'pill', style: 'min-height:40px;font-size:12px', 'aria-pressed': String(p.autoVoice) }, 'Voz automática');
   main.append(h('section', { class: 'card', style: 'gap:10px;padding:12px 14px' },
     h('div', { class: 'row' }, topicSel, newBtn),
-    h('div', { class: 'between' }, h('div', { class: 'seg', role: 'group', 'aria-label': 'Modo' }, modeBtns), h('span', { class: 'muted small' }, `Nivel ${level} · con Flor`))));
+    h('div', { class: 'between' }, h('div', { class: 'seg', role: 'group', 'aria-label': 'Modo' }, modeBtns), h('span', { class: 'muted small' }, `Nivel ${level} · con Flor`)),
+    h('div', { class: 'row wrap', style: 'gap:8px' }, h('span', { class: 'small muted' }, 'Voz'), voiceSel, autoBtn)));
 
   const list = h('div', { class: 'list', 'aria-live': 'polite', style: 'gap:10px' });
   const panel = h('section', { class: 'hero', 'aria-label': 'Palabra seleccionada', hidden: true, style: 'padding:16px 18px;gap:10px' });
@@ -48,16 +53,28 @@ export async function render(main) {
   const composer = h('div', { class: 'row', style: 'align-items:flex-end' }, input, send);
 
   // --- Live controls
-  const voiceSel = h('select', { 'aria-label': 'Voz', style: 'min-height:40px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:0 10px;font-size:14px' }, VOICES.map((v) => h('option', { value: v }, v)));
-  voiceSel.value = p.voice;
   const liveBtn = h('button', { type: 'button', class: 'round rec', 'aria-label': 'Empezar a hablar', style: 'align-self:center' },
     h('span', { html: '<svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>', style: 'display:contents' }));
   const liveStatus = h('p', { class: 'small', role: 'status', style: 'text-align:center;font-weight:600' }, 'Tocá el micrófono y hablá. Flor te contesta con su voz.');
   const liveBox = h('section', { class: 'card', style: 'gap:10px;align-items:stretch' }, liveBtn, liveStatus,
-    h('div', { class: 'between' }, h('label', { class: 'small muted' }, 'Voz de Flor'), voiceSel),
     h('p', { class: 'muted', style: 'font-size:12px;line-height:1.4' }, 'Usá auriculares si podés. El acento depende de Gemini: le pido porteño, pero puede no salirle perfecto.'));
 
   main.append(composer, liveBox, panel);
+
+  // --- Flor's voice: live audio she already spoke, or Gemini text-to-speech for text replies.
+  let warned = false;
+  async function sayMsg(m, btn) {
+    if (btn) btn.textContent = '…';
+    try {
+      if (!m.audio) { const r = await geminiSpeech(m.text, p.voice); m.audio = r.samples; m.rate = r.rate; }
+      if (btn) btn.textContent = '■ Parar';
+      await playPcm(m.audio, m.rate || 24000);
+    } catch (err) {
+      if (!warned) { toast(`Sin voz de Gemini (${err.message || err}). Uso la del teléfono.`); warned = true; }
+      speak(m.text);
+    }
+    if (btn) btn.textContent = '▶ Repetir';
+  }
 
   // --- Rendering
   function bubble(m) {
@@ -66,8 +83,10 @@ export async function render(main) {
         : tappableText(m.text, (word, b) => { markWord(list, b); showWordPanel(panel, word, { context: sentenceWith(m.text, word), tag: '#Charla' }); }, 'font-size:17px;line-height:1.5');
       const save = h('button', { type: 'button', class: 'pill', style: 'min-height:36px;font-size:12px;align-self:flex-start' }, 'Guardar frase');
       save.onclick = async () => { await db.put('mazo', { front: m.text, ipa: transcribe(m.text), back: '', tag: '#Charla', created: Date.now() }); toast('Guardado en el Mazo'); };
+      const again = h('button', { type: 'button', class: 'pill', style: 'min-height:36px;font-size:12px' }, '▶ Repetir');
+      again.onclick = () => { unlockAudio(); if (again.textContent.startsWith('■')) { stopPcm(); again.textContent = '▶ Repetir'; } else sayMsg(m, again); };
       return h('div', { class: 'card', style: 'gap:6px;padding:12px 14px;max-width:88%;align-self:flex-start;border-bottom-left-radius:6px' },
-        h('span', { class: 'kicker', style: 'font-size:10px' }, 'FLOR'), body, m.text && !m.pending ? save : '');
+        h('span', { class: 'kicker', style: 'font-size:10px' }, 'FLOR'), body, m.text && !m.pending ? h('div', { class: 'row wrap', style: 'gap:6px' }, again, save) : '');
     }
     const corr = m.corr && m.corr.length
       ? h('div', { style: 'display:flex;flex-direction:column;gap:4px;margin-top:4px;padding-top:6px;border-top:1px solid color-mix(in srgb, var(--sel-ink) 25%, transparent)' },
@@ -105,8 +124,10 @@ export async function render(main) {
     try { pending.text = await reply(history, p.topic, level); }
     catch (err) { pending.text = ''; msgs.splice(msgs.indexOf(pending), 1); toast(err.message || 'No pude hablar con Gemini'); }
     pending.pending = false; draw(); scrollEnd();
+    if (pending.text && p.autoVoice && p.mode === 'texto') sayMsg(pending);
   }
   send.onclick = async () => {
+    unlockAudio(); // the tap lets Android play Flor's voice when her answer arrives
     const text = input.value.trim();
     if (!text) return;
     input.value = '';
@@ -130,12 +151,12 @@ export async function render(main) {
         curUser.text += d; draw(); scrollEnd();
       },
       onModelText: (d) => {
-        if (!curModel) { curModel = { role: 'model', text: '' }; msgs.push(curModel); }
+        if (!curModel) { curModel = { role: 'model', text: '', live: true }; msgs.push(curModel); }
         curModel.text += d; draw(); scrollEnd();
       },
-      onTurnComplete: () => {
+      onTurnComplete: (audio) => {
         if (curUser && curUser.text.trim()) { curUser.text = curUser.text.trim(); check(curUser); }
-        if (curModel) curModel.text = curModel.text.trim();
+        if (curModel) { curModel.text = curModel.text.trim(); if (audio) { curModel.audio = concat(audio); curModel.rate = live.rate || 24000; } }
         curUser = null; curModel = null; draw();
       },
       onError: (msg) => { liveStatus.textContent = msg; setLiveBtn(false); },
@@ -155,11 +176,13 @@ export async function render(main) {
 
   // --- Settings
   topicSel.onchange = () => { p = setPref({ topic: topicSel.value }); stopLive(); msgs = []; draw(); if (p.mode === 'texto') modelTurn(); };
-  voiceSel.onchange = () => { p = setPref({ voice: voiceSel.value }); if (live) startLive(); };
+  voiceSel.onchange = () => { p = setPref({ voice: voiceSel.value }); msgs.forEach((m) => { if (m.role === 'model' && !m.live) { m.audio = null; } }); if (live) startLive(); };
+  autoBtn.onclick = () => { unlockAudio(); p = setPref({ autoVoice: !p.autoVoice }); autoBtn.setAttribute('aria-pressed', String(p.autoVoice)); };
   newBtn.onclick = () => { stopLive(); msgs = []; draw(); if (p.mode === 'texto') modelTurn(); };
   modeBtns.forEach((b, i) => { b.onclick = () => { p = setPref({ mode: i ? 'voz' : 'texto' }); if (p.mode === 'texto') stopLive(); showMode(); draw(); }; });
 
+  main.addEventListener('pointerdown', unlockAudio, { once: true });
   showMode(); draw();
   if (p.mode === 'texto' && !msgs.length) modelTurn();
-  return () => { stopLive(); stopSpeaking(); };
+  return () => { stopLive(); stopSpeaking(); stopPcm(); };
 }

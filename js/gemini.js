@@ -70,3 +70,35 @@ export async function ask({ system, turns, json = false, temperature = 0.7 }) {
   const text = await call(s.model, s.key, payload);
   return json ? JSON.parse(text.replace(/^```json\s*|```$/g, '')) : text;
 }
+
+// Gemini text-to-speech: returns { samples: Float32Array, rate }. Tries known TTS model names.
+const TTS_MODELS = ['gemini-2.5-flash-preview-tts', 'gemini-3.1-flash-tts-preview', 'gemini-2.5-flash-tts'];
+export async function geminiSpeech(text, voice = 'Aoede', style = 'Decilo con acento rioplatense de Buenos Aires, natural y cálido') {
+  const s = getGemini();
+  if (!s.key) throw new Error('Falta la clave de Gemini.');
+  const models = s.tts ? [s.tts, ...TTS_MODELS.filter((m) => m !== s.tts)] : TTS_MODELS;
+  let last;
+  for (const model of models) {
+    const res = await fetch(`${BASE}/models/${model}:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': s.key.trim() },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: `${style}: ${text}` }] }],
+        generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } } },
+      }),
+    });
+    const body = await res.json().catch(() => null);
+    if (res.status === 404) { last = new Error('Sin modelo de voz disponible.'); continue; }
+    if (!res.ok) { const e = new Error(explain(res.status, body)); e.status = res.status; throw e; }
+    const part = body && body.candidates && body.candidates[0] && body.candidates[0].content && (body.candidates[0].content.parts || []).find((p) => p.inlineData);
+    if (!part) throw new Error('Gemini no devolvió audio.');
+    if (s.tts !== model) setGemini({ tts: model });
+    const rate = Number((/rate=(\d+)/.exec(part.inlineData.mimeType || '') || [])[1]) || 24000;
+    const bin = atob(part.inlineData.data);
+    const n = bin.length >> 1;
+    const samples = new Float32Array(n);
+    for (let i = 0; i < n; i++) { let v = bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8); if (v >= 0x8000) v -= 0x10000; samples[i] = v / 0x8000; }
+    return { samples, rate };
+  }
+  throw last || new Error('Sin modelo de voz disponible.');
+}
