@@ -43,6 +43,12 @@ export async function render(main) {
       : 'Importá el paquete de audios de OpenSLR desde Perfil para empezar.'),
     h('a', { class: 'btn', href: clipCount ? '#/sombra' : '#/perfil', style: 'align-self:flex-start;margin-top:6px' }, clipCount ? 'Empezar' : 'Ir a Perfil', iconEl('next'))));
 
+  main.append(h('a', { href: '#/charla', class: 'card', style: 'flex-direction:row;align-items:center;justify-content:space-between;text-decoration:none;color:inherit' },
+    h('div', { style: 'display:flex;flex-direction:column;gap:2px' },
+      h('span', { style: 'font-family:var(--display);font-size:20px;font-weight:600' }, 'Charlá con Flor'),
+      h('span', { class: 'muted small' }, 'Conversación en porteño, por texto o en voz en vivo.')),
+    h('span', { style: 'font-weight:700;color:var(--accent)' }, 'Ir →')));
+
   if (clipCount) main.append(h('section', { class: 'card' },
     h('div', { class: 'between' }, h('h2', {}, 'Calentamiento'), h('a', { href: '#/calentamiento', style: 'font-weight:700;font-size:14px;text-decoration:none;min-height:44px;display:flex;align-items:center' }, 'Empezar →')),
     h('p', { class: 'muted small' }, '5 frases para repetir en voz alta. Dos minutos para despertar la boca.')));

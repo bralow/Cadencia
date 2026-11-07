@@ -26,14 +26,27 @@ export function features(word, ipa) {
 // A paragraph whose words are buttons; onWord(word, button) is called on tap.
 export function tappableText(text, onWord, style = 'font-family:var(--display);font-size:19px;line-height:1.75') {
   const p = h('p', { style, lang: 'es-AR' });
-  for (const part of text.split(LETTERS)) {
-    if (!part) continue;
-    if (LETTERS.test(part) && /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+$/.test(part)) {
+  const parts = text.split(LETTERS).filter((x) => x !== '');
+  let lead = ''; // opening punctuation (¿ ¡ « ") that must stay with the next word
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (/^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+$/.test(part)) {
       const b = h('button', { type: 'button', class: 'word', style: 'all:unset;cursor:pointer;border-radius:6px;padding:0 1px' }, part);
       b.onclick = () => onWord(part, b);
-      p.append(b);
-    } else p.append(part);
+      // Closing punctuation right after the word (",", "?", "...") stays on the same line.
+      const next = parts[i + 1] && !/^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/.test(parts[i + 1]) ? parts[i + 1] : '';
+      const tail = (next.match(/^[^\s]+/) || [''])[0];
+      p.append(lead || tail ? h('span', { style: 'white-space:nowrap' }, lead, b, tail) : b);
+      lead = '';
+      if (tail) { parts[i + 1] = next.slice(tail.length); }
+    } else {
+      const m = part.match(/[^\s]+$/);
+      const head = m && i + 1 < parts.length ? m[0] : '';
+      p.append(head ? part.slice(0, -head.length) : part);
+      lead = head;
+    }
   }
+  if (lead) p.append(lead);
   return p;
 }
 
