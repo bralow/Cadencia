@@ -94,6 +94,34 @@ function bookView(main, book, count) {
     const n = load(NOTES_KEY); delete n[book.id]; save(NOTES_KEY, n);
     openBook = null; window.dispatchEvent(new Event('cadencia:rerender'));
   };
+  // Keep only a page range (drops front matter, index, back matter).
+  const pageOf = (st) => st.page ?? (Number((st.title.match(/^Página (\d+)$/) || [])[1]) || null);
+  const pages = book.stories.map(pageOf).filter((x) => x !== null);
+  if (pages.length) {
+    const from = h('input', { type: 'number', inputmode: 'numeric', id: 'pfrom', value: String(Math.min(...pages)), min: '1', style: 'width:90px;min-height:44px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);padding:0 10px;font-size:16px' });
+    const to = h('input', { type: 'number', inputmode: 'numeric', id: 'pto', value: String(Math.max(...pages)), min: '1', style: 'width:90px;min-height:44px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);padding:0 10px;font-size:16px' });
+    const apply = h('button', { type: 'button', class: 'btn' }, 'Recortar');
+    apply.onclick = async () => {
+      const a = Number(from.value), z = Number(to.value);
+      if (!a || !z || a > z) { toast('Revisá las páginas'); return; }
+      const kept = book.stories.filter((st) => { const pg = pageOf(st); return pg === null || (pg >= a && pg <= z); });
+      if (!kept.length) { toast('No queda ningún relato en ese rango'); return; }
+      if (!window.confirm(`¿Quedarte con las páginas ${a} a ${z}? Se quitan ${book.stories.length - kept.length} partes del libro en el teléfono.`)) return;
+      // Re-key read marks and notes to the new positions.
+      const map = new Map(kept.map((st, i) => [book.stories.indexOf(st), i]));
+      const r = load(READ_KEY); r[book.id] = (r[book.id] || []).filter((i) => map.has(i)).map((i) => map.get(i)); save(READ_KEY, r);
+      const n = load(NOTES_KEY); const old = n[book.id] || {}; n[book.id] = Object.fromEntries(Object.entries(old).filter(([i]) => map.has(Number(i))).map(([i, v]) => [map.get(Number(i)), v])); save(NOTES_KEY, n);
+      await db.put('books', { ...book, stories: kept });
+      toast(`Listo: ${kept.length} partes`);
+      window.dispatchEvent(new Event('cadencia:rerender'));
+    };
+    main.append(h('section', { class: 'card', style: 'gap:8px' },
+      h('h2', { style: 'font-size:18px' }, 'Recortar el libro'),
+      h('p', { class: 'muted small' }, 'Quedate solo con las páginas de los relatos (sin índice, prólogo ni contratapa).'),
+      h('div', { class: 'row wrap', style: 'gap:10px' },
+        h('label', { for: 'pfrom', class: 'small', style: 'font-weight:600' }, 'Desde'), from,
+        h('label', { for: 'pto', class: 'small', style: 'font-weight:600' }, 'hasta'), to, apply)));
+  }
   const others = h('button', { type: 'button', class: 'btn ghost' }, count > 1 ? 'Ver todos los libros' : 'Importar otro PDF');
   others.onclick = () => { openBook = '__library__'; window.dispatchEvent(new Event('cadencia:rerender')); };
   main.append(h('div', { class: 'row wrap' }, others, del));

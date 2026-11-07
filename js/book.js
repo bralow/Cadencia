@@ -81,11 +81,11 @@ export function splitStories(lines, pages) {
 
   body.forEach((l, i) => {
     if (isTitle(l, i)) {
-      cur = { title: l.text, paragraphs: [''] };
+      cur = { title: l.text, paragraphs: [''], page: l.page };
       stories.push(cur);
       return;
     }
-    if (!cur) { cur = { title: 'Inicio', paragraphs: [''] }; stories.push(cur); }
+    if (!cur) { cur = { title: 'Inicio', paragraphs: [''], page: l.page }; stories.push(cur); }
     const prev = body[i - 1];
     const para = cur.paragraphs;
     const newPara = !para[para.length - 1] || (prev && prev.page === l.page && (prev.y - l.y > lineGap * 1.6)) || (l.x > minX + 6 && TERMINAL.test(para[para.length - 1]));
@@ -103,7 +103,7 @@ export function splitStories(lines, pages) {
     out = [];
     for (let p = 1; p <= pages; p++) {
       const t = body.filter((l) => l.page === p).map((l) => l.text).join(' ').replace(/- ([a-záéíóúñ])/g, '$1');
-      if (t.split(' ').length >= 12) out.push({ title: `Página ${p}`, paragraphs: [t] });
+      if (t.split(' ').length >= 12) out.push({ title: `Página ${p}`, paragraphs: [t], page: p });
     }
   }
   return out;
