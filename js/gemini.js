@@ -21,6 +21,7 @@ function explain(status, body) {
   if (status === 401 || status === 403) return `Google rechazó la clave (${status}). ${msg}`.trim();
   if (status === 429) return 'Llegaste al límite gratis por ahora. Probá en un rato.';
   if (status === 404) return 'Ese modelo no está disponible.';
+  if (status === 503 || status === 500 || status === 502 || status === 504) return 'Gemini está saturado en este momento (lo intenté con varios modelos). Probá de nuevo en un minuto.';
   return `Gemini respondió ${status}. ${msg}`.trim();
 }
 
@@ -40,6 +41,30 @@ async function call(model, key, payload) {
     e.status = 200; throw e;
   }
   return text;
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const BUSY = (st) => st === 500 || st === 502 || st === 503 || st === 504;
+// Busy server: wait a little and try again before giving up on this model.
+async function callRetry(model, key, payload) {
+  for (let attempt = 0; ; attempt++) {
+    try { return await call(model, key, payload); }
+    catch (err) { if (BUSY(err.status) && attempt < 2) { await sleep(1500 * (attempt + 1)); continue; } throw err; }
+  }
+}
+// Other models to use when the saved one is overloaded or out of free quota. Each model has its own limits.
+const BACKUPS = ['gemini-3.5-flash', 'gemini-flash-latest', 'gemini-2.5-flash', 'gemini-3.1-flash-lite-preview', 'gemini-2.5-flash-lite', 'gemini-flash-lite-latest'];
+async function callAny(s, makePayload) {
+  const models = [s.model, ...BACKUPS.filter((m) => m !== s.model)];
+  let last;
+  for (const model of models) {
+    try { return await callRetry(model, s.key, makePayload(model)); }
+    catch (err) {
+      last = err;
+      if (!(BUSY(err.status) || err.status === 429 || err.status === 404)) throw err;
+    }
+  }
+  throw last;
 }
 
 // Finds a model that works with this key and saves both.
@@ -70,11 +95,11 @@ export async function ask({ system, turns, json = false, temperature = 0.7, fast
   if (system) payload.systemInstruction = { parts: [{ text: system }] };
   let text;
   if (fast) {
-    const thinkingConfig = /gemini-2\./.test(s.model) ? { thinkingBudget: 0 } : { thinkingLevel: 'minimal' };
-    try { text = await call(s.model, s.key, { ...payload, generationConfig: { ...payload.generationConfig, thinkingConfig } }); }
-    catch (err) { if (err.status !== 400) throw err; } // this model doesn't take that setting: ask normally
+    const withThinking = (model) => ({ ...payload, generationConfig: { ...payload.generationConfig, thinkingConfig: /gemini-2\./.test(model) ? { thinkingBudget: 0 } : { thinkingLevel: 'minimal' } } });
+    try { text = await callAny(s, withThinking); }
+    catch (err) { if (err.status !== 400) throw err; } // a model that doesn't take that setting: ask normally
   }
-  if (text === undefined) text = await call(s.model, s.key, payload);
+  if (text === undefined) text = await callAny(s, () => payload);
   return json ? JSON.parse(text.replace(/^```json\s*|```$/g, '')) : text;
 }
 
@@ -95,7 +120,7 @@ export async function geminiSpeech(text, voice = 'Aoede', style = 'Decilo con ac
       }),
     });
     const body = await res.json().catch(() => null);
-    if (res.status === 404) { last = new Error('Sin modelo de voz disponible.'); continue; }
+    if (res.status === 404 || res.status === 429 || BUSY(res.status)) { last = new Error(explain(res.status, body)); continue; }
     if (!res.ok) { const e = new Error(explain(res.status, body)); e.status = res.status; throw e; }
     const part = body && body.candidates && body.candidates[0] && body.candidates[0].content && (body.candidates[0].content.parts || []).find((p) => p.inlineData);
     if (!part) throw new Error('Gemini no devolvió audio.');

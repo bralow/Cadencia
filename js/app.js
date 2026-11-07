@@ -1,6 +1,6 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.07-c (escribir)';
+export const APP_VERSION = '2026.11.07-d (reintentos de Gemini)';
 import { h } from './ui.js';
 
 applyTheme();
