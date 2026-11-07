@@ -32,9 +32,13 @@ async function call(model, key, payload) {
   });
   const body = await res.json().catch(() => null);
   if (!res.ok) { const e = new Error(explain(res.status, body)); e.status = res.status; throw e; }
-  const text = body && body.candidates && body.candidates[0] && body.candidates[0].content && body.candidates[0].content.parts
-    ? body.candidates[0].content.parts.map((p) => p.text || '').join('') : '';
-  if (!text) throw new Error('Gemini no devolvió texto (puede haber sido bloqueado por sus filtros).');
+  const cand = body && body.candidates && body.candidates[0];
+  const text = cand && cand.content && cand.content.parts ? cand.content.parts.filter((p) => !p.thought).map((p) => p.text || '').join('') : '';
+  if (!text) {
+    const why = (cand && cand.finishReason) || (body && body.promptFeedback && body.promptFeedback.blockReason) || 'sin motivo';
+    const e = new Error(why === 'MAX_TOKENS' ? 'Gemini se quedó sin espacio para responder (MAX_TOKENS).' : `Gemini no devolvió texto (motivo: ${why}).`);
+    e.status = 200; throw e;
+  }
   return text;
 }
 
@@ -43,12 +47,12 @@ export async function testKey(key) {
   let last = null;
   for (const model of CANDIDATES) {
     try {
-      const text = await call(model, key, { contents: [{ role: 'user', parts: [{ text: 'Respondé solo con la palabra: listo' }] }], generationConfig: { maxOutputTokens: 20 } });
+      const text = await call(model, key, { contents: [{ role: 'user', parts: [{ text: 'Respondé solo con la palabra: listo' }] }] });
       setGemini({ key: key.trim(), model });
       return { model, text: text.trim() };
     } catch (err) {
       last = err;
-      if (err.status !== 404) break; // a key problem won't be fixed by another model
+      if (err.status !== 404 && err.status !== 200) break; // a key problem won't be fixed by another model
     }
   }
   throw last || new Error('No pude conectar con Gemini.');
