@@ -17,7 +17,11 @@ export async function render(main) {
   main.append(h('div', { class: 'between' }, readTabs('libros')));
   const books = await db.all('books');
   // Books imported before the accent fix get repaired once, in place.
-  for (let i = 0; i < books.length; i++) { const fixed = repairBook(books[i]); if (fixed) { books[i] = fixed; await db.put('books', fixed); } }
+  for (let i = 0; i < books.length; i++) {
+    if (books[i].charFix >= 2) continue;
+    const fixed = repairBook(books[i]); books[i] = fixed; await db.put('books', fixed);
+    if (fixed.charMap.length) toast(`Arreglé ${fixed.charMap.length} letras mal escritas en «${fixed.title}»`);
+  }
   if (openBook && openBook !== '__library__' && !books.some((b) => b.id === openBook)) { openBook = null; openStory = null; }
   if (!openBook && books.length === 1) openBook = books[0].id;
   const book = books.find((b) => b.id === openBook);
@@ -66,7 +70,8 @@ function bookView(main, book, count) {
   const read = new Set(load(READ_KEY)[book.id] || []);
   const header = h('div', { style: 'display:flex;flex-direction:column;gap:4px' },
     h('h1', { style: 'font-size:26px' }, book.title),
-    h('span', { class: 'muted small' }, `${read.size} de ${book.stories.length} relatos leídos`));
+    h('span', { class: 'muted small' }, `${read.size} de ${book.stories.length} relatos leídos`),
+    book.charMap && book.charMap.length ? h('span', { class: 'muted small' }, 'Letras arregladas: ' + book.charMap.map((m) => `${m.from} → ${m.to}`).join(' · ')) : '');
   const progress = h('div', { class: 'progress' }, h('div', { style: `width:${(read.size / book.stories.length) * 100}%` }));
   const search = h('input', { type: 'search', placeholder: 'Buscar un relato…', 'aria-label': 'Buscar un relato', autocomplete: 'off',
     style: 'min-height:48px;padding:0 16px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-size:16px;width:100%' });
