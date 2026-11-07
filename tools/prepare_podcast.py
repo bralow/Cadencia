@@ -9,7 +9,12 @@ Three steps, all on your computer, safe to stop and run again (finished work is 
      (Cadencia > Perfil > Importar paquete).
 
 Setup, once (PowerShell, in the folder with this script):
-    pip install faster-whisper nvidia-cublas-cu12 "nvidia-cudnn-cu12==9.*"
+    pip install faster-whisper
+  (with an NVIDIA card, also: pip install nvidia-cublas-cu12 "nvidia-cudnn-cu12==9.*")
+
+Speed: on a normal processor the "medium" model takes very roughly 1/3 of the audio's length
+(20 minutes of audio in about 7). After the first episode it prints how long is left; if that is
+too long, stop it (Ctrl+C) and run again with --modelo small (about twice as fast, a bit less exact).
 
 Usage:
     python prepare_podcast.py "C:\\path\\to\\argentalk"
@@ -86,16 +91,27 @@ def add_cuda_dlls():
             os.environ["PATH"] = d + os.pathsep + os.environ.get("PATH", "")
 
 
+def has_nvidia():
+    try:
+        return subprocess.run(["nvidia-smi"], capture_output=True).returncode == 0
+    except Exception:
+        return False
+
+
 def load_whisper(model_name):
     add_cuda_dlls()
     try:
         from faster_whisper import WhisperModel
     except ImportError:
-        sys.exit("Falta Whisper. Corré:  pip install faster-whisper nvidia-cublas-cu12 \"nvidia-cudnn-cu12==9.*\"")
-    for device, compute in (("cuda", "float16"), ("cuda", "int8_float16"), ("cpu", "int8")):
+        sys.exit("Falta Whisper. Corré:  pip install faster-whisper")
+    gpu = has_nvidia()
+    options = ([("cuda", "float16"), ("cuda", "int8_float16")] if gpu else []) + [("cpu", "int8")]
+    for device, compute in options:
+        name = model_name or ("large-v3" if device == "cuda" else "medium")
         try:
-            print(f"Cargando Whisper ({model_name}) en {'la placa NVIDIA' if device == 'cuda' else 'el procesador (más lento)'}…")
-            m = WhisperModel(model_name, device=device, compute_type=compute)
+            print(f"Cargando Whisper ({name}) en {'la placa NVIDIA' if device == 'cuda' else 'el procesador'}… (la primera vez se descarga el modelo)")
+            kw = {"cpu_threads": os.cpu_count() or 4} if device == "cpu" else {}
+            m = WhisperModel(name, device=device, compute_type=compute, **kw)
             if device == "cuda":
                 # Make sure the GPU libraries really load (they fail only when first used).
                 import numpy as np
@@ -126,7 +142,7 @@ def main():
     ap.add_argument("folder", help="Carpeta con los episodios (.webm, .mp3…)")
     ap.add_argument("--out", default=str(Path(__file__).with_name("cadencia-podcast")), help="Carpeta de salida")
     ap.add_argument("--show", default="ArgenTalk", help="Nombre del programa (default: ArgenTalk)")
-    ap.add_argument("--modelo", default="large-v3", help="Modelo de Whisper: large-v3 (mejor), medium, small")
+    ap.add_argument("--modelo", default=None, help="Modelo de Whisper: large-v3 (el mejor, lento sin NVIDIA), medium (por defecto sin NVIDIA), small (rápido)")
     ap.add_argument("--solo-comprimir", action="store_true", help="Solo el paso 1")
     args = ap.parse_args()
 
