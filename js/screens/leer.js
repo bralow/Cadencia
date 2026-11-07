@@ -27,7 +27,8 @@ function features(word, ipa) {
 export function readTabs(active) {
   return h('div', { class: 'seg', role: 'navigation', 'aria-label': 'Leer' },
     active === 'lectura' ? h('span', { class: 'on', 'aria-current': 'page' }, 'Lectura') : h('a', { href: '#/leer' }, 'Lectura'),
-    active === 'lunfardo' ? h('span', { class: 'on', 'aria-current': 'page' }, 'Lunfardo') : h('a', { href: '#/lunfardo' }, 'Lunfardo'));
+    active === 'lunfardo' ? h('span', { class: 'on', 'aria-current': 'page' }, 'Lunfardo') : h('a', { href: '#/lunfardo' }, 'Lunfardo'),
+    active === 'ipa' ? h('span', { class: 'on', 'aria-current': 'page' }, 'IPA') : h('a', { href: '#/ipa' }, 'IPA'));
 }
 
 export async function render(main) {

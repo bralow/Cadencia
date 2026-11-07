@@ -1,6 +1,6 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.06-o (trabalenguas, elisión, calentamiento)';
+export const APP_VERSION = '2026.11.06-p (IPA)';
 import { h } from './ui.js';
 
 applyTheme();
@@ -15,6 +15,7 @@ const routes = {
   calentamiento: { tab: 'hoy', load: () => import('./screens/calentamiento.js') },
   leer: { tab: 'leer', load: () => import('./screens/leer.js') },
   lunfardo: { tab: 'leer', load: () => import('./screens/lunfardo.js') },
+  ipa: { tab: 'leer', load: () => import('./screens/ipa.js') },
   mazo: { tab: 'mazo', load: () => import('./screens/mazo.js') },
   perfil: { tab: 'perfil', load: () => import('./screens/perfil.js') },
 };
