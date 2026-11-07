@@ -63,30 +63,35 @@ export async function render(main) {
 
   // --- Flor's voice: live audio she already spoke, or Gemini text-to-speech for text replies.
   let warned = false;
-  async function sayMsg(m, btn) {
+  async function sayMsg(m, btn, auto) {
     if (btn) btn.textContent = '…';
+    if (auto) { m.voicing = true; draw(); }
     try {
       if (!m.audio) { const r = await geminiSpeech(m.text, p.voice); m.audio = r.samples; m.rate = r.rate; }
       if (btn) btn.textContent = '■ Parar';
+      if (auto) { m.voicing = false; draw(); }
       await playPcm(m.audio, m.rate || 24000);
     } catch (err) {
       if (!warned) { toast(`Sin voz de Gemini (${err.message || err}). Uso la del teléfono.`); warned = true; }
       speak(m.text);
     }
+    if (m.voicing) { m.voicing = false; draw(); }
     if (btn) btn.textContent = '▶ Repetir';
   }
 
   // --- Rendering
   function bubble(m) {
     if (m.role === 'model') {
-      const body = m.pending && !m.text ? h('p', { class: 'muted small' }, 'Flor está escribiendo…')
+      const body = m.pending && !m.text ? h('p', { class: 'muted small' }, m.live ? 'Flor está por hablar…' : 'Flor está escribiendo…')
         : tappableText(m.text, (word, b) => { markWord(list, b); showWordPanel(panel, word, { context: sentenceWith(m.text, word), tag: '#Charla' }); }, 'font-size:17px;line-height:1.5');
       const save = h('button', { type: 'button', class: 'pill', style: 'min-height:36px;font-size:12px;align-self:flex-start' }, 'Guardar frase');
       save.onclick = async () => { await db.put('mazo', { front: m.text, ipa: transcribe(m.text), back: '', tag: '#Charla', created: Date.now() }); toast('Guardado en el Mazo'); };
       const again = h('button', { type: 'button', class: 'pill', style: 'min-height:36px;font-size:12px' }, '▶ Repetir');
       again.onclick = () => { unlockAudio(); if (again.textContent.startsWith('■')) { stopPcm(); again.textContent = '▶ Repetir'; } else sayMsg(m, again); };
       return h('div', { class: 'card', style: 'gap:6px;padding:12px 14px;max-width:88%;align-self:flex-start;border-bottom-left-radius:6px' },
-        h('span', { class: 'kicker', style: 'font-size:10px' }, 'FLOR'), body, m.text && !m.pending ? h('div', { class: 'row wrap', style: 'gap:6px' }, again, save) : '');
+        h('span', { class: 'kicker', style: 'font-size:10px' }, 'FLOR'), body,
+        m.voicing ? h('span', { class: 'muted small' }, '🔊 preparando la voz…') : '',
+        m.text && !m.pending ? h('div', { class: 'row wrap', style: 'gap:6px' }, again, save) : '');
     }
     const corr = m.corr && m.corr.length
       ? h('div', { style: 'display:flex;flex-direction:column;gap:4px;margin-top:4px;padding-top:6px;border-top:1px solid color-mix(in srgb, var(--sel-ink) 25%, transparent)' },
@@ -124,17 +129,69 @@ export async function render(main) {
     try { pending.text = await reply(history, p.topic, level); }
     catch (err) { pending.text = ''; msgs.splice(msgs.indexOf(pending), 1); toast(err.message || 'No pude hablar con Gemini'); }
     pending.pending = false; draw(); scrollEnd();
-    if (pending.text && p.autoVoice && p.mode === 'texto') sayMsg(pending);
+    if (pending.text && p.autoVoice && p.mode === 'texto') sayMsg(pending, null, true);
   }
+
+  // Typed message, spoken answer: a live connection with no mic streams Flor's voice as she
+  // answers, instead of writing the reply first and then recording it (two slow trips).
+  let tlive = null, tconn = null, tcur = null, liveFailed = false;
+  const historyOf = (list) => {
+    const hist = list.filter((m) => !m.pending && m.text).map((m) => ({ role: m.role, text: m.text }));
+    if (hist.length && hist[0].role !== 'user') hist.unshift({ role: 'user', text: '(Empezá vos la charla: saludá y hacé una pregunta.)' });
+    return hist;
+  };
+  function dropText() { if (tlive) { tlive.stop(); } tlive = null; tconn = null; tcur = null; }
+  function textLive(prior) {
+    if (tlive && tlive.ws && tlive.ws.readyState === 1) return Promise.resolve(tlive);
+    if (tconn) return tconn;
+    const s = new LiveSession({
+      onStatus: () => {}, onSpeaking: () => {}, onUserText: () => {},
+      onModelText: (d) => { if (!tcur) return; tcur.text += d; tcur.pending = false; draw(); scrollEnd(); },
+      onTurnComplete: (audio) => {
+        if (!tcur) return;
+        tcur.text = tcur.text.trim(); tcur.pending = false;
+        if (audio) { tcur.audio = concat(audio); tcur.rate = s.rate || 24000; }
+        tcur = null; draw();
+      },
+      onError: () => { if (tlive === s) { tlive = null; tconn = null; } },
+    });
+    tconn = s.start({ system: persona(p.topic, level) + '\nLa otra persona te escribe y vos respondés en voz alta: frases naturales y cortas.', voice: p.voice, mic: false, history: prior })
+      .then(() => { tlive = s; tconn = null; return s; }, (err) => { tconn = null; s.stop(); throw err; });
+    return tconn;
+  }
+  async function voiceTurn(text, prior) {
+    const pending = { role: 'model', text: '', pending: true, live: true };
+    msgs.push(pending); draw(); scrollEnd();
+    tcur = pending;
+    try {
+      const s = await textLive(prior);
+      s.sendText(text);
+      log('charla', { voiceText: true });
+    } catch (err) {
+      liveFailed = true; tcur = null;
+      msgs.splice(msgs.indexOf(pending), 1);
+      toast('La voz rápida no conectó; sigo con la voz normal.');
+      return modelTurn();
+    }
+    // If she says nothing in 15 s, reconnect and answer the slow way instead of leaving you hanging.
+    setTimeout(() => {
+      if (pending.pending && !pending.text && msgs.includes(pending)) {
+        dropText(); msgs.splice(msgs.indexOf(pending), 1); modelTurn();
+      }
+    }, 15000);
+  }
+
   send.onclick = async () => {
     unlockAudio(); // the tap lets Android play Flor's voice when her answer arrives
     const text = input.value.trim();
     if (!text) return;
     input.value = '';
+    const prior = historyOf(msgs);
     const m = { role: 'user', text };
     msgs.push(m); draw(); scrollEnd();
     check(m);
-    await modelTurn();
+    if (p.autoVoice && !liveFailed) await voiceTurn(text, prior);
+    else await modelTurn();
   };
   input.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send.click(); } };
 
@@ -175,14 +232,14 @@ export async function render(main) {
   liveBtn.onclick = () => (live ? (stopLive(), liveStatus.textContent = 'Charla en pausa. Tocá para seguir.') : startLive());
 
   // --- Settings
-  topicSel.onchange = () => { p = setPref({ topic: topicSel.value }); stopLive(); msgs = []; draw(); if (p.mode === 'texto') modelTurn(); };
-  voiceSel.onchange = () => { p = setPref({ voice: voiceSel.value }); msgs.forEach((m) => { if (m.role === 'model' && !m.live) { m.audio = null; } }); if (live) startLive(); };
+  topicSel.onchange = () => { p = setPref({ topic: topicSel.value }); stopLive(); dropText(); msgs = []; draw(); if (p.mode === 'texto') modelTurn(); };
+  voiceSel.onchange = () => { p = setPref({ voice: voiceSel.value }); msgs.forEach((m) => { if (m.role === 'model' && !m.live) { m.audio = null; } }); dropText(); if (live) startLive(); };
   autoBtn.onclick = () => { unlockAudio(); p = setPref({ autoVoice: !p.autoVoice }); autoBtn.setAttribute('aria-pressed', String(p.autoVoice)); };
-  newBtn.onclick = () => { stopLive(); msgs = []; draw(); if (p.mode === 'texto') modelTurn(); };
-  modeBtns.forEach((b, i) => { b.onclick = () => { p = setPref({ mode: i ? 'voz' : 'texto' }); if (p.mode === 'texto') stopLive(); showMode(); draw(); }; });
+  newBtn.onclick = () => { stopLive(); dropText(); msgs = []; draw(); if (p.mode === 'texto') modelTurn(); };
+  modeBtns.forEach((b, i) => { b.onclick = () => { p = setPref({ mode: i ? 'voz' : 'texto' }); if (p.mode === 'texto') stopLive(); else dropText(); showMode(); draw(); }; });
 
   main.addEventListener('pointerdown', unlockAudio, { once: true });
   showMode(); draw();
   if (p.mode === 'texto' && !msgs.length) modelTurn();
-  return () => { stopLive(); stopSpeaking(); stopPcm(); };
+  return () => { stopLive(); dropText(); stopSpeaking(); stopPcm(); };
 }

@@ -1,6 +1,6 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.06-y (voz de Flor)';
+export const APP_VERSION = '2026.11.06-z (Flor más rápida)';
 import { h } from './ui.js';
 
 applyTheme();

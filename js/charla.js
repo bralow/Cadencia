@@ -54,5 +54,5 @@ Devolvé un objeto JSON {"corrections": [...]} donde cada corrección es {"origi
 
 // One text turn. history: [{ role: 'user'|'model', text }]
 export async function reply(history, topicId, level) {
-  return (await ask({ system: persona(topicId, level), turns: history, temperature: 0.9 })).trim();
+  return (await ask({ system: persona(topicId, level), turns: history, temperature: 0.9, fast: true })).trim();
 }

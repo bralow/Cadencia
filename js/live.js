@@ -31,7 +31,9 @@ export class LiveSession {
   // handlers: onStatus(text), onUserText(delta), onModelText(delta), onTurnComplete(), onError(msg), onSpeaking(bool)
   constructor(handlers) { this.h = handlers; this.ws = null; this.playing = new Set(); }
 
-  async start({ system, voice }) {
+  // mic: false = typed conversation; Flor still answers with streamed voice.
+  // history: earlier turns, so a reconnect keeps the thread of the conversation.
+  async start({ system, voice, mic = true, history = [] }) {
     const { key } = getGemini();
     if (!key) throw new Error('Falta la clave de Gemini (Perfil → Gemini).');
     this.stopped = false;
@@ -40,14 +42,18 @@ export class LiveSession {
     this.outCtx = new AudioContext({ sampleRate: 24000 });
     this.outCtx.resume().catch(() => {});
     this.turnAudio = [];
-    // Mic first, so the permission prompt comes before connecting.
-    this.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } });
-    this.inCtx = new AudioContext({ sampleRate: 16000 });
     this.nextAt = 0;
-    const url = URL.createObjectURL(new Blob([WORKLET], { type: 'text/javascript' }));
-    await this.inCtx.audioWorklet.addModule(url);
-    URL.revokeObjectURL(url);
+    this.mic = mic;
+    if (mic) {
+      // Mic first, so the permission prompt comes before connecting.
+      this.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } });
+      this.inCtx = new AudioContext({ sampleRate: 16000 });
+      const url = URL.createObjectURL(new Blob([WORKLET], { type: 'text/javascript' }));
+      await this.inCtx.audioWorklet.addModule(url);
+      URL.revokeObjectURL(url);
+    }
     await this.connect(key, { system, voice }, 0);
+    if (history.length) this.ws.send(JSON.stringify({ clientContent: { turns: history.map((t) => ({ role: t.role, parts: [{ text: t.text }] })), turnComplete: false } }));
   }
 
   connect(key, cfg, attempt) {
@@ -65,12 +71,13 @@ export class LiveSession {
           systemInstruction: { parts: [{ text: cfg.system }] },
           inputAudioTranscription: {},
           outputAudioTranscription: {},
+          contextWindowCompression: { slidingWindow: {} },
         } }));
       };
       ws.onmessage = async (ev) => {
         const raw = typeof ev.data === 'string' ? ev.data : await ev.data.text();
         let msg; try { msg = JSON.parse(raw); } catch { return; }
-        if (msg.setupComplete) { ready = true; this.model = model; this.startMic(); this.h.onStatus('Escuchando…'); resolve(model); return; }
+        if (msg.setupComplete) { ready = true; this.model = model; if (this.mic) { this.startMic(); this.h.onStatus('Escuchando…'); } resolve(model); return; }
         this.handle(msg);
       };
       ws.onerror = () => {};

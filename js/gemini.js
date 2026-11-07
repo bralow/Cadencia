@@ -59,7 +59,8 @@ export async function testKey(key) {
 }
 
 // One request. system: instructions; turns: [{ role: 'user'|'model', text }]; json: ask for JSON output.
-export async function ask({ system, turns, json = false, temperature = 0.7 }) {
+// fast: ask the model to skip most of its "thinking", which is what makes chat replies slow.
+export async function ask({ system, turns, json = false, temperature = 0.7, fast = false }) {
   const s = getGemini();
   if (!s.key || !s.model) throw new Error('Falta la clave de Gemini (Perfil → Gemini).');
   const payload = {
@@ -67,7 +68,13 @@ export async function ask({ system, turns, json = false, temperature = 0.7 }) {
     generationConfig: { temperature, ...(json ? { responseMimeType: 'application/json' } : {}) },
   };
   if (system) payload.systemInstruction = { parts: [{ text: system }] };
-  const text = await call(s.model, s.key, payload);
+  let text;
+  if (fast) {
+    const thinkingConfig = /gemini-2\./.test(s.model) ? { thinkingBudget: 0 } : { thinkingLevel: 'minimal' };
+    try { text = await call(s.model, s.key, { ...payload, generationConfig: { ...payload.generationConfig, thinkingConfig } }); }
+    catch (err) { if (err.status !== 400) throw err; } // this model doesn't take that setting: ask normally
+  }
+  if (text === undefined) text = await call(s.model, s.key, payload);
   return json ? JSON.parse(text.replace(/^```json\s*|```$/g, '')) : text;
 }
 
