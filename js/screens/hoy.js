@@ -4,6 +4,7 @@ import { getSettings } from '../settings.js';
 import { transcribe } from '../ipa.js';
 import { Player } from '../audio.js';
 import { streak, phonemeStatus } from '../progress.js';
+import { dayNumber, cardFor } from './cultura.js';
 
 // Built-in phrases used until clips are imported.
 const PHRASES = [
@@ -42,6 +43,12 @@ export async function render(main) {
       ? 'Escuchá, grabá tu voz y comparala con la nativa, onda por onda.'
       : 'Importá el paquete de audios de OpenSLR desde Perfil para empezar.'),
     h('a', { class: 'btn', href: clipCount ? '#/sombra' : '#/perfil', style: 'align-self:flex-start;margin-top:6px' }, clipCount ? 'Empezar' : 'Ir a Perfil', iconEl('next'))));
+
+  const card = cardFor(dayNumber());
+  main.append(h('a', { href: '#/cultura', class: 'card', style: 'text-decoration:none;color:inherit;gap:6px' },
+    h('div', { class: 'between' }, h('span', { class: 'kicker' }, `TARJETA DEL DÍA · ${card.cat.toUpperCase()}`), h('span', { style: 'font-weight:700;color:var(--accent)' }, 'Leer →')),
+    h('span', { style: 'font-family:var(--display);font-size:22px;font-weight:600' }, card.title),
+    h('span', { class: 'muted small', style: 'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden' }, card.text)));
 
   main.append(h('a', { href: '#/charla', class: 'card', style: 'flex-direction:row;align-items:center;justify-content:space-between;text-decoration:none;color:inherit' },
     h('div', { style: 'display:flex;flex-direction:column;gap:2px' },

@@ -1,6 +1,6 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.07-f (diario de voz)';
+export const APP_VERSION = '2026.11.07-g (tarjeta del día)';
 import { h } from './ui.js';
 
 applyTheme();
@@ -16,6 +16,7 @@ const routes = {
   trabalenguas: { tab: 'practicar', load: () => import('./screens/trabalenguas.js') },
   elision: { tab: 'practicar', load: () => import('./screens/elision.js') },
   cognados: { tab: 'practicar', load: () => import('./screens/cognados.js') },
+  cultura: { tab: 'hoy', load: () => import('./screens/cultura.js') },
   calentamiento: { tab: 'hoy', load: () => import('./screens/calentamiento.js') },
   progreso: { tab: 'hoy', load: () => import('./screens/progreso.js') },
   leer: { tab: 'leer', load: () => import('./screens/leer.js') },

@@ -8,6 +8,7 @@ import { unlockAudio, stopPcm } from '../pcm.js';
 import { checkVoseo, applyVoseo } from '../vosfix.js';
 import { getSettings } from '../settings.js';
 import { log } from '../progress.js';
+import { takeHandoff } from './cultura.js';
 
 const KEY = 'cadencia.escribir';
 const load = () => { try { return { draft: '', prompt: null, history: [], ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch { return { draft: '', prompt: null, history: [] }; } };
@@ -18,7 +19,9 @@ export async function render(main) {
   main.append(h('div', { class: 'between' }, practiceTabs('escribir')));
   const level = getSettings().level;
   let st = load();
-  if (!st.prompt || st.prompt.level !== level) st = save({ prompt: { ...promptFor(level), level } });
+  const handed = takeHandoff();
+  if (handed) st = save({ prompt: { text: handed, index: -1, level } });
+  else if (!st.prompt || st.prompt.level !== level) st = save({ prompt: { ...promptFor(level), level } });
 
   // --- Prompt and editor
   const promptText = h('p', { style: 'font-size:17px;line-height:1.4;font-family:var(--display)' }, st.prompt.text);

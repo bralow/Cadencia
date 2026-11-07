@@ -9,6 +9,7 @@ import { unlockAudio, stopPcm } from '../pcm.js';
 import { getSettings } from '../settings.js';
 import { db } from '../db.js';
 import { log } from '../progress.js';
+import { takeHandoff } from './cultura.js';
 
 const MAX = 120; // seconds
 const fmtTime = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
@@ -30,7 +31,7 @@ function spark(values, color) {
 export async function render(main) {
   main.append(h('div', { class: 'between' }, practiceTabs('diario')));
   const level = getSettings().level;
-  let prompt = promptOfDay();
+  let prompt = takeHandoff() || promptOfDay();
 
   const promptEl = h('p', { style: 'font-size:17px;line-height:1.4;font-family:var(--display)' }, prompt);
   const another = h('button', { type: 'button', class: 'pill', style: 'min-height:36px;font-size:12px' }, 'Otra consigna');
