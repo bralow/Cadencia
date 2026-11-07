@@ -5,8 +5,11 @@ import { importPdf , repairBook } from '../book.js';
 import { showWordPanel, tappableText, markWord, sentenceWith } from '../wordpanel.js';
 import { checkVoseo, applyVoseo } from '../vosfix.js';
 import { stopSpeaking } from '../tts.js';
+import { translateStory } from '../traducir.js';
+import { geminiReady } from '../gemini.js';
+import { getSettings } from '../settings.js';
 
-const READ_KEY = 'cadencia.read', NOTES_KEY = 'cadencia.notes';
+const READ_KEY = 'cadencia.read', NOTES_KEY = 'cadencia.notes', TR_KEY = 'cadencia.libros.tr';
 const load = (k) => { try { return JSON.parse(localStorage.getItem(k) || '{}'); } catch { return {}; } };
 const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* ignore */ } };
 let openBook = null, openStory = null;
@@ -145,12 +148,38 @@ function storyView(main, book, i) {
   main.append(h('div', { class: 'between' }, back, h('div', { class: 'row', style: 'gap:0' }, prev, h('span', { class: 'muted small' }, `${i + 1} / ${book.stories.length}`), next)));
 
   const panel = h('section', { class: 'hero', 'aria-label': 'Palabra seleccionada', 'aria-live': 'polite', hidden: true, style: 'padding:16px 18px;gap:10px' });
-  const article = h('article', { class: 'card', style: 'gap:14px;padding:20px' }, h('h1', { style: 'font-size:26px' }, s.title));
-  for (const para of s.paragraphs) {
-    article.append(tappableText(para, (word, b) => { markWord(article, b); showWordPanel(panel, word, { context: sentenceWith(para, word), tag: tagFor(book) }); },
-      'font-family:var(--display);font-size:19px;line-height:1.7'));
+  const article = h('article', { class: 'card', style: 'gap:14px;padding:20px' });
+  const notesBox = h('div');
+  const trBtn = h('button', { type: 'button', class: 'pill', style: 'min-height:40px', 'aria-pressed': 'false', hidden: !geminiReady() && !s.tr }, 'Traducir');
+  let showTr = load(TR_KEY).on === true && !!s.tr;
+  const trStyle = 'font-size:15px;line-height:1.5;color:var(--muted);font-style:italic;border-left:3px solid var(--line);padding-left:10px';
+  function drawStory() {
+    trBtn.setAttribute('aria-pressed', String(showTr));
+    trBtn.textContent = showTr ? 'Ocultar traducción' : 'Traducir';
+    article.replaceChildren(h('h1', { style: 'font-size:26px' }, s.title), showTr && s.tr.title ? h('p', { style: trStyle }, s.tr.title) : '');
+    s.paragraphs.forEach((para, k) => {
+      article.append(tappableText(para, (word, b) => { markWord(article, b); showWordPanel(panel, word, { context: sentenceWith(para, word), tag: tagFor(book) }); },
+        'font-family:var(--display);font-size:19px;line-height:1.7'));
+      if (showTr && s.tr.paragraphs[k]) article.append(h('p', { style: trStyle, lang: 'en' }, s.tr.paragraphs[k]));
+    });
+    notesBox.replaceChildren(showTr && s.tr.notes.length ? h('section', { class: 'card', style: 'gap:8px' },
+      h('span', { class: 'kicker' }, 'PARA ENTENDER'),
+      ...s.tr.notes.map((n) => h('p', { class: 'small', style: 'line-height:1.45' }, h('b', {}, n.phrase), ' — ', n.note))) : '');
   }
-  main.append(h('p', { class: 'muted small' }, 'Tocá una palabra para ver sílabas, sonidos, el DLE y guardarla.'), article, panel);
+  trBtn.onclick = async () => {
+    if (showTr) { showTr = false; save(TR_KEY, { on: false }); drawStory(); return; }
+    if (!s.tr) {
+      trBtn.disabled = true; trBtn.textContent = 'Traduciendo…';
+      try {
+        s.tr = await translateStory(s.title, s.paragraphs, getSettings().level);
+        await db.put('books', book); // saved with the book: each story is translated once
+      } catch (err) { toast('No pude traducir: ' + (err.message || err)); trBtn.disabled = false; drawStory(); return; }
+      trBtn.disabled = false;
+    }
+    showTr = true; save(TR_KEY, { on: true }); drawStory();
+  };
+  drawStory();
+  main.append(h('div', { class: 'between' }, h('p', { class: 'muted small', style: 'flex:1' }, 'Tocá una palabra para ver sílabas, sonidos, el DLE y guardarla.'), trBtn), article, notesBox, panel);
 
   const reads = load(READ_KEY);
   const isRead = () => (reads[book.id] || []).includes(i);

@@ -1,6 +1,6 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.07-h (voz del teléfono)';
+export const APP_VERSION = '2026.11.07-i (traducir relatos)';
 import { h } from './ui.js';
 
 applyTheme();
