@@ -3,6 +3,7 @@ import { practiceTabs } from './sombra.js';
 import { transcribe } from '../ipa.js';
 import { db } from '../db.js';
 import { Player, Recorder } from '../audio.js';
+import { log } from '../progress.js';
 
 // An s or z at the end of a syllable before a consonant (same word or next word) is aspirated: [h].
 const SPOT = /[sz](?=\s*[bcdfgjklmnñpqrtvxyBCDFGJKLMNÑPQRTVXY])/g;
@@ -77,7 +78,7 @@ export async function render(main) {
     clearTimeout(autoStop);
     const blob = await recorder.stop();
     recBtn.classList.remove('live'); recBtn.replaceChildren(iconEl('mic')); recLabel.textContent = 'Grabar';
-    if (blob && blob.size) { mine.load(blob); mineBtn.disabled = false; }
+    if (blob && blob.size) { mine.load(blob); mineBtn.disabled = false; log('elision'); }
   }
   recBtn.onclick = async () => {
     if (recorder.recording) { await stopRec(); return; }

@@ -2,6 +2,7 @@ import { h, iconEl, toast } from './ui.js';
 import { analyzeWord } from './ipa.js';
 import { db } from './db.js';
 import { speak, ttsReady, argentineAudio, cachedArgentineAudio } from './tts.js';
+import { log, discover } from './progress.js';
 
 const LETTERS = /([A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+)/;
 
@@ -51,6 +52,8 @@ export function showWordPanel(panel, word, { context = '', tag = '#Lectura' } = 
   const a = analyzeWord(word);
   if (!a) return;
   const ipa = a.ipa;
+  log('lookup', { word: a.word });
+  discover(ipa);
   const syl = a.spelling.map((s, i) => h('span', { style: `padding:6px 12px;border-radius:10px;background:color-mix(in srgb, var(--hero-ink) 12%, transparent);font-size:15px;${i === a.stress ? 'font-weight:700' : ''}` }, i === a.stress && a.spelling.length > 1 ? s.toUpperCase() : s));
   const sylRow = h('div', { class: 'row wrap', style: 'gap:6px' });
   syl.forEach((s, i) => { if (i) sylRow.append(h('span', { style: 'color:var(--hero-muted)' }, '·')); sylRow.append(s); });

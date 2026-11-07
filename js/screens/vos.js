@@ -3,6 +3,7 @@ import { practiceTabs } from './sombra.js';
 import { questionsFor, noteFor } from '../vosdata.js';
 import { transcribe } from '../ipa.js';
 import { db } from '../db.js';
+import { log } from '../progress.js';
 
 const ROUND = 10;
 const MODES = [['pres', 'Presente'], ['imp', 'Imperativo'], ['subj', 'Subjuntivo']];
@@ -74,6 +75,7 @@ export async function render(main) {
     const ok = q.accept.some((a) => clean(a) === got);
     const near = !ok && q.accept.some((a) => bare(a) === bare(got));
     if (ok) score++;
+    log('vos', { mode: q.mode, correct: ok });
     checked = true;
     input.disabled = true;
     const filled = q.sentence.replace('___', q.answer).replace(/^./, (c) => c.toUpperCase());

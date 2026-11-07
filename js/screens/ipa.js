@@ -2,8 +2,10 @@ import { h, toast, shuffle } from '../ui.js';
 import { readTabs } from './leer.js';
 import { SOUNDS, CONFUSABLE, WORDS } from '../ipadata.js';
 import { transcribe } from '../ipa.js';
+import { log, discover, TRACKED } from '../progress.js';
 
 let mode = 'simbolos';
+const soundIds = (w) => { const ipa = transcribe(w); return TRACKED.filter((s) => s.match(ipa)).map((s) => s.id); };
 const MODES = [['simbolos', 'Símbolos'], ['descifrar', 'Descifrar'], ['escribir', 'Escribir']];
 
 // IPA string -> list of sound tokens (tʃ is one token), without brackets, stress or dots.
@@ -40,6 +42,7 @@ function soundboard(root) {
         h('span', { style: 'font-size:10px;font-weight:600;color:var(--muted)' }, x.name),
         x.ar ? h('span', { 'aria-hidden': 'true', style: 'position:absolute;top:4px;right:7px;color:var(--accent);font-size:11px' }, '●') : null);
       b.onclick = () => {
+        discover(`[${x.s}]`);
         detail.replaceChildren(
           h('div', { class: 'row', style: 'gap:12px;align-items:baseline' },
             h('span', { style: 'font-family:var(--ipa-font);font-size:40px;color:var(--gold-text)' }, `[${x.s}]`),
@@ -78,6 +81,7 @@ function decodeGame(root) {
       const b = h('button', { type: 'button', class: 'pill', style: 'min-height:56px;font-size:18px;font-family:var(--display);border-radius:14px' }, o);
       b.onclick = () => {
         opts.querySelectorAll('button').forEach((x) => { x.disabled = true; if (x.textContent === w) { x.style.background = 'var(--sel)'; x.style.color = 'var(--sel-ink)'; x.style.opacity = '1'; } });
+        log('ipa', { game: 'decode', correct: o === w, sounds: soundIds(w) });
         if (o === w) { score++; fb.textContent = '¡Bien leído!'; }
         else { b.style.textDecoration = 'line-through'; fb.textContent = `“${o}” sería ${transcribe(o)}.`; }
         next.textContent = idx < round.length - 1 ? 'Siguiente' : 'Ver resultado';
@@ -143,6 +147,7 @@ function encodeGame(root) {
     done = true;
     const ok = got.join('') === answer.join('');
     if (ok) score++;
+    log('ipa', { game: 'encode', correct: ok, sounds: soundIds(round[idx]) });
     const w = round[idx];
     const traps = got.filter((s, i) => s !== answer[i]);
     fb.replaceChildren(...[

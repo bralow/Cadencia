@@ -3,6 +3,7 @@ import { db } from '../db.js';
 import { getSettings } from '../settings.js';
 import { transcribe } from '../ipa.js';
 import { Player } from '../audio.js';
+import { streak, phonemeStatus } from '../progress.js';
 
 // Built-in phrases used until clips are imported.
 const PHRASES = [
@@ -49,6 +50,13 @@ export async function render(main) {
   main.append(h('section', { class: 'card' },
     h('div', { class: 'between' }, h('h2', {}, 'Vos en 2 minutos'), h('a', { href: '#/vos', style: 'font-weight:700;font-size:14px;text-decoration:none;min-height:44px;display:flex;align-items:center' }, 'Practicar →')),
     h('p', { class: 'muted small' }, 'tenés, querés, vení, decime: dejá el tú atrás.')));
+
+  const st = streak(), mastered = phonemeStatus().filter((p) => p.level === 3).length;
+  main.append(h('a', { href: '#/progreso', class: 'card', style: 'flex-direction:row;align-items:center;justify-content:space-between;text-decoration:none;color:inherit' },
+    h('div', { style: 'display:flex;flex-direction:column;gap:2px' },
+      h('span', { style: 'font-family:var(--display);font-size:20px;font-weight:600' }, 'Tu progreso'),
+      h('span', { class: 'muted small' }, `Racha: ${st.n} día${st.n === 1 ? '' : 's'} · ${mastered} de 9 sonidos dominados`)),
+    h('span', { style: 'font-weight:700;color:var(--accent)' }, 'Ver →')));
 
   // Phrase of the day: an imported clip if there are any, else a built-in phrase.
   let text, back = '', blob = null;

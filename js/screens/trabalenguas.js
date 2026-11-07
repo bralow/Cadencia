@@ -4,6 +4,7 @@ import { TRABAS, PACE } from '../trabadata.js';
 import { analyzeWord, transcribe } from '../ipa.js';
 import { Player, Recorder, decode, peaks } from '../audio.js';
 import { onset, speechEnd } from '../waveform.js';
+import { log } from '../progress.js';
 
 let current = 0, speedKey = '1';
 const WORD = /([A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+)/;
@@ -122,6 +123,7 @@ export async function render(main) {
       const secs = Math.max(0.3, speechEnd(track) - onset(track));
       const rate = lay.syllables / secs, target = PACE[speedKey];
       const diff = rate / target;
+      log('traba', { id: TRABAS[current].id, speed: speedKey, rate, ok: diff >= 0.88 && diff <= 1.12 });
       const verdict = diff > 1.12 ? 'Fuiste más rápido que la meta. Bajá un cambio y cuidá cada sonido.' : diff < 0.88 ? 'Un poco lento todavía. Repetilo hasta que salga de corrido.' : '¡En el ritmo justo!';
       const fmt = (x) => x.toFixed(1).replace('.', ',');
       result.replaceChildren(

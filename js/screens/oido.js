@@ -4,6 +4,7 @@ import { CONTRASTS } from '../pairsdata.js';
 import { transcribe } from '../ipa.js';
 import { db } from '../db.js';
 import { Player } from '../audio.js';
+import { log } from '../progress.js';
 
 const ROUND = 10;
 const LETTERS = 'a-záéíóúüñ';
@@ -109,6 +110,7 @@ export async function render(main) {
     const q = round[idx];
     const ok = choice === q.word;
     if (ok) score++;
+    log('oido', { contrast: contrastId, correct: ok });
     options.querySelectorAll('button').forEach((b) => {
       b.disabled = true;
       if (b.textContent === q.word) { b.style.background = 'var(--sel)'; b.style.color = 'var(--sel-ink)'; b.style.opacity = '1'; }

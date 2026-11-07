@@ -6,6 +6,7 @@ import { Player, Recorder, decode, peaks } from '../audio.js';
 import { Waveform, onset, speechEnd } from '../waveform.js';
 import { pitchTrack } from '../pitch.js';
 import { alignTakes } from '../dtw.js';
+import { log } from '../progress.js';
 
 const SESSION = 10;
 let session = null; // survives tab switches: { ids, index, level }
@@ -107,6 +108,7 @@ export async function render(main) {
     wave.warpOn = on;
     if (on && !wave.warp && nativeBuf && userBuf) {
       wave.warp = alignTakes(nativeBuf, userBuf, onset(wave.native), speechEnd(wave.native), onset(wave.user), speechEnd(wave.user));
+      if (wave.warp) log('sombra', { rhythm: wave.warp.similarity });
       if (!wave.warp) { toast('No pude alinear esta toma. Probá grabarla de nuevo.'); syllBtn.setAttribute('aria-pressed', 'false'); wave.warpOn = false; }
     }
     if (wave.warp) {
@@ -237,6 +239,7 @@ export async function render(main) {
       wave.setUserPitch(pitchTrack(buf));
       wave.scale = 1; matchLen.setAttribute('aria-pressed', 'false');
       autoAlignStart();
+      log('sombra', { recorded: true });
       if (syllBtn.getAttribute('aria-pressed') === 'true') syllables(true);
     } catch { toast('No pude leer la grabación'); }
   }

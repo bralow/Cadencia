@@ -3,6 +3,7 @@ import { practiceTabs } from './sombra.js';
 import { RULES, toSpanish, FALSE_FRIENDS } from '../cognates.js';
 import { analyzeWord, transcribe } from '../ipa.js';
 import { db } from '../db.js';
+import { log } from '../progress.js';
 
 let mode = 'convertir';
 const MODES = [['convertir', 'Convertir'], ['reglas', 'Reglas'], ['ronda', 'Ronda rápida'], ['falsos', 'Falsos amigos']];
@@ -80,6 +81,7 @@ function speedRound(root) {
     if (locked) return;
     locked = true; cancelAnimationFrame(raf); clearTimeout(timer);
     const q = all[idx];
+    log('cognados', { correct: choice === q.es });
     if (choice === q.es) { score++; fb.textContent = `¡Sí! -${q.rule.en} → -${q.rule.es}`; } else fb.textContent = choice ? `Era “${q.es}” (-${q.rule.en} → -${q.rule.es})` : `¡Tiempo! Era “${q.es}”.`;
     opts.querySelectorAll('button').forEach((b) => { b.disabled = true; if (b.textContent === q.es) { b.style.background = 'var(--sel)'; b.style.color = 'var(--sel-ink)'; b.style.opacity = '1'; } });
     setTimeout(() => { idx++; if (idx < all.length) show(); else finish(); }, 1300);

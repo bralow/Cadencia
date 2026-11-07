@@ -3,6 +3,7 @@ import { db } from '../db.js';
 import { getSettings } from '../settings.js';
 import { transcribe } from '../ipa.js';
 import { Player } from '../audio.js';
+import { log } from '../progress.js';
 
 // Daily warm-up: 5 short clips; each plays, then you repeat out loud in a timed gap. Twice per clip.
 const COUNT = 5, REPS = 2;
@@ -68,6 +69,7 @@ export async function render(main) {
       }
     }
     if (cancelled) return;
+    log('warmup');
     card.replaceChildren(h('span', { class: 'kicker' }, 'LISTO'), h('p', { style: 'font-family:var(--display);font-size:28px;font-weight:700' }, '¡Boca despierta!'),
       h('p', { class: 'muted small' }, 'Ahora sí: a practicar en serio.'),
       h('a', { class: 'btn', href: '#/sombra' }, 'Ir a Sombra'));
