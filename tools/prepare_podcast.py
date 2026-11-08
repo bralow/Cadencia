@@ -123,8 +123,17 @@ def load_whisper(model_name):
     sys.exit("No pude cargar Whisper.")
 
 
-def transcribe(model, audio_path):
-    segments, info = model.transcribe(str(audio_path), language="es", word_timestamps=True, vad_filter=True,
+def load_audio(ffmpeg, path):
+    """Decode with ffmpeg to 16 kHz mono floats, so Whisper never has to open the file itself
+    (its own reader, PyAV, breaks with some versions)."""
+    import numpy as np
+    out = subprocess.run([ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-i", str(path),
+                          "-f", "s16le", "-ac", "1", "-ar", "16000", "-"], capture_output=True, check=True).stdout
+    return np.frombuffer(out, np.int16).astype(np.float32) / 32768.0
+
+
+def transcribe(model, ffmpeg, audio_path):
+    segments, info = model.transcribe(load_audio(ffmpeg, audio_path), language="es", word_timestamps=True, vad_filter=True,
                                       beam_size=5, condition_on_previous_text=False)
     out = []
     for s in segments:
@@ -191,7 +200,7 @@ def main():
             t0 = time.time()
             print(f"  … transcribiendo {e['title'][:50]} ({fmt(dur)} de audio)", flush=True)
             try:
-                segs = transcribe(model, e["audio"])
+                segs = transcribe(model, ffmpeg, e["audio"])
             except Exception as err:
                 print(f"  ⚠ Falló este episodio ({str(err)[:200]}). Sigo con el próximo.", flush=True)
                 continue
@@ -205,7 +214,11 @@ def main():
             spent = time.time() - start
             left = spent / k * (len(todo) - k)
             print(f"  {k:>3}/{len(todo)}  {e['title'][:50]}  ({fmt(dur)} de audio en {fmt(time.time() - t0)}; faltan ~{fmt(left)})")
-    print("  Todas las transcripciones listas.\n")
+    missing = [e for e in eps if not (out / "transcripciones" / f"{e['id']}.json").exists()]
+    if missing:
+        print(f"  ⚠ {len(missing)} episodios quedaron sin transcripción. Corré el mismo comando otra vez para reintentarlos.\n")
+    else:
+        print("  Todas las transcripciones listas.\n")
 
     # 3. Pack
     print("PASO 3: empaquetar")
