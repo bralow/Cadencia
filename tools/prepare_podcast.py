@@ -28,6 +28,7 @@ Output goes to a folder "cadencia-podcast" next to this script (or --out PATH):
 The audio and transcripts are for your personal use on your own phone. Do not upload them anywhere public.
 """
 import argparse
+import faulthandler
 import glob
 import json
 import os
@@ -112,10 +113,10 @@ def load_whisper(model_name):
             print(f"Cargando Whisper ({name}) en {'la placa NVIDIA' if device == 'cuda' else 'el procesador'}… (la primera vez se descarga el modelo)")
             kw = {"cpu_threads": os.cpu_count() or 4} if device == "cpu" else {}
             m = WhisperModel(name, device=device, compute_type=compute, **kw)
-            if device == "cuda":
-                # Make sure the GPU libraries really load (they fail only when first used).
-                import numpy as np
-                list(m.transcribe(np.zeros(16000, dtype=np.float32), language="es")[0])
+            print("  Modelo cargado. Probando el motor con un segundo de silencio…", flush=True)
+            import numpy as np
+            list(m.transcribe(np.zeros(16000, dtype=np.float32), language="es")[0])
+            print("  El motor funciona. Empiezo con los episodios (el primero tarda unos minutos).", flush=True)
             return m
         except Exception as err:
             print(f"  No funcionó ({str(err)[:160]}). Pruebo otra opción…")
@@ -138,6 +139,11 @@ def fmt(sec):
 
 
 def main():
+    # If the speech engine crashes (it is native code), print where instead of closing silently.
+    faulthandler.enable()
+    os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+    import warnings
+    warnings.filterwarnings("ignore", message=".*symlinks.*")
     ap = argparse.ArgumentParser(description="Comprime, transcribe y empaqueta episodios para Cadencia.")
     ap.add_argument("folder", help="Carpeta con los episodios (.webm, .mp3…)")
     ap.add_argument("--out", default=str(Path(__file__).with_name("cadencia-podcast")), help="Carpeta de salida")
@@ -183,7 +189,15 @@ def main():
         for k, e in enumerate(todo, 1):
             dur = duration(ffprobe, e["audio"])
             t0 = time.time()
-            segs = transcribe(model, e["audio"])
+            print(f"  … transcribiendo {e['title'][:50]} ({fmt(dur)} de audio)", flush=True)
+            try:
+                segs = transcribe(model, e["audio"])
+            except Exception as err:
+                print(f"  ⚠ Falló este episodio ({str(err)[:200]}). Sigo con el próximo.", flush=True)
+                continue
+            if not segs:
+                print("  ⚠ No se entendió nada en este episodio; lo salteo.", flush=True)
+                continue
             data = {"id": e["id"], "title": e["title"], "n": e["n"], "duration": round(dur, 1), "segments": segs}
             tmp = out / "transcripciones" / f"{e['id']}.part.json"
             tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
@@ -210,7 +224,8 @@ def main():
         zpath = out / f"{slug(args.show).lower()}-{i}.zip"
         with zipfile.ZipFile(zpath, "w", compression=zipfile.ZIP_STORED) as z:
             for e in group:
-                t = json.loads((out / "transcripciones" / f"{e['id']}.json").read_text(encoding="utf-8"))
+                tp = out / "transcripciones" / f"{e['id']}.json"
+                t = json.loads(tp.read_text(encoding="utf-8")) if tp.exists() else {"id": e["id"], "title": e["title"], "n": e["n"], "duration": round(duration(ffprobe, e["audio"]), 1), "segments": []}
                 manifest["episodes"].append({**t, "file": f"audio/{e['id']}.ogg"})
                 z.write(e["audio"], f"audio/{e['id']}.ogg")
             z.writestr("podcast.json", json.dumps(manifest, ensure_ascii=False))
