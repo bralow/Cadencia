@@ -3,8 +3,14 @@ Cadencia song-pack builder (for example Plim Plim videos you have).
 
 Cuts each song out of long videos and turns it into a small audio file for the app.
 Where the songs are comes from, in this order:
-  1. a spreadsheet "canciones.csv" in the videos folder, if there is one (see below), or
-  2. the chapters inside each video file (most downloaded .webm videos keep them).
+  1. a spreadsheet "canciones.csv" in the folder, if there is one (see below), or
+  2. a text file with the same name as the video or MP3 (for example "plimplim 1.txt" next to
+     "plimplim 1.mp3") holding the chapter list copied from the YouTube description:
+         0:00 Intro
+         3:15 Lavarse las manos
+         5:40 La canción del baño
+     Each song ends where the next one starts; the last one ends with the file. Or
+  3. the chapters inside each video file (most downloaded .webm videos keep them).
 
 Needs only Python and ffmpeg (the same as for the clips). No transcription, no translation.
 
@@ -86,6 +92,37 @@ def chapters(ffprobe, path):
     return res
 
 
+TIME_RE = re.compile(r"(?<![\d:])((?:\d{1,2}:)?\d{1,2}:\d{2})(?![\d:])")
+
+
+def file_duration(ffprobe, path):
+    try:
+        out = subprocess.run([ffprobe, "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
+                             capture_output=True, text=True, check=True).stdout.strip()
+        return float(out)
+    except Exception:
+        return 0.0
+
+
+def read_chapter_txt(path, src, ffprobe):
+    """YouTube-style chapter list: a time and a title on each line, in either order."""
+    marks = []
+    for line in path.read_text(encoding="utf-8-sig", errors="replace").splitlines():
+        m = TIME_RE.search(line)
+        if not m:
+            continue
+        title = (line[:m.start()] + " " + line[m.end():]).strip(" \t-\u2013\u2014|:.\u00b7")
+        marks.append((to_seconds(m.group(1)), title))
+    marks.sort(key=lambda x: x[0])
+    total = file_duration(ffprobe, src)
+    out = []
+    for i, (start, title) in enumerate(marks):
+        end = marks[i + 1][0] if i + 1 < len(marks) else total
+        if end > start:
+            out.append({"start": start, "end": end, "title": title})
+    return out
+
+
 def read_csv(path, files_by_name):
     text = path.read_text(encoding="utf-8-sig")
     dialect = csv.Sniffer().sniff(text.splitlines()[0], delimiters=",;\t") if text.strip() else csv.excel
@@ -156,12 +193,17 @@ def main():
         for pr in problems:
             print("  ⚠", pr)
     else:
-        print(f"Leo los capítulos de {len(files)} videos…")
+        print(f"Busco las canciones de {len(files)} archivos…")
         songs, skip = [], [norm(w) for w in args.saltar.split(",") if w.strip()]
         for f in files:
-            chs = chapters(ffprobe, f)
+            txt = f.with_suffix(".txt")
+            if txt.exists():
+                chs = read_chapter_txt(txt, f, ffprobe)
+                print(f"  {f.name}: {len(chs)} capítulos de {txt.name}")
+            else:
+                chs = chapters(ffprobe, f)
             if not chs:
-                print(f"  ⚠ {f.name}: no tiene capítulos (agregalo a canciones.csv)")
+                print(f"  ⚠ {f.name}: no tiene capítulos. Poné al lado un {f.stem}.txt con la lista de la descripción de YouTube.")
                 continue
             for c in chs:
                 t = norm(c["title"])
