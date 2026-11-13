@@ -1,6 +1,12 @@
 // Daily culture cards, written for Cadencia. One per day; the list cycles.
 // vocab: [word, English gloss]. q: a question to answer out loud (Diario) or in writing (Escribir).
-export const CARDS = [
+import { CARDS2 } from './cultura2.js';
+import { CARDS3 } from './cultura3.js';
+import { CARDS4 } from './cultura4.js';
+import { CARDS5 } from './cultura5.js';
+import { CARDS6 } from './cultura6.js';
+
+const BASE = [
   { cat: 'Comida', title: 'El mate', text: 'El mate no es solo una bebida: es una excusa para juntarse. Una persona, el cebador, prepara el mate y lo pasa a cada uno de la ronda. Vos lo tomás todo y se lo devolvés. Ojo: si decís «gracias», significa que no querés más.', vocab: [['cebador', 'the person who prepares and serves the mate'], ['ronda', 'round, the circle of people sharing'], ['bombilla', 'metal straw for mate']], q: '¿Qué bebida comparte tu familia o tus amigos? Contá cómo es ese momento.' },
   { cat: 'Lunfardo', title: 'Che', text: '«Che» es quizás la palabra más porteña de todas. Sirve para llamar a alguien («¡Che, vení!»), para empezar una frase («Che, ¿sabés qué?») o para dar énfasis. Es tan argentina que en muchos países a los argentinos les dicen «los che».', vocab: [['llamar', 'to call someone'], ['dar énfasis', 'to emphasize'], ['¡vení!', 'come here! (vos imperative)']], q: '¿Hay una palabra en tu idioma que uses todo el tiempo como «che»? Explicala.' },
   { cat: 'Costumbres', title: 'Un beso para saludar', text: 'En Buenos Aires la gente se saluda con un beso en la mejilla, aunque sea la primera vez que se ven. Es un solo beso, y entre amigos varones también es normal. En el trabajo, muchas veces, también se saluda así.', vocab: [['mejilla', 'cheek'], ['saludar', 'to greet'], ['varones', 'men, males']], q: '¿Cómo se saluda la gente en tu país? ¿Te costaría saludar con un beso?' },
@@ -63,3 +69,6 @@ export const CARDS = [
   { cat: 'Comida', title: 'El choripán', text: 'El choripán es un chorizo a la parrilla dentro de un pan francés, con chimichurri. Es la comida de la cancha, de las marchas, de la costanera y de cualquier asado. Rápido, barato y riquísimo.', vocab: [['chimichurri', 'herb, garlic and vinegar sauce'], ['costanera', 'riverside avenue'], ['riquísimo', 'delicious']], q: '¿Cuál es la comida callejera de tu ciudad? Describila.' },
   { cat: 'Lugares', title: 'El Río de la Plata', text: 'El Río de la Plata es tan ancho que desde Buenos Aires no se ve la otra orilla, donde está Uruguay. Es un estuario, donde el agua del río se mezcla con el mar, y su color es marrón por el barro que traen el Paraná y el Uruguay.', vocab: [['ancho', 'wide'], ['estuario', 'estuary'], ['barro', 'mud']], q: '¿Hay un río, un lago o un mar importante cerca de donde vivís? Describilo.' },
 ];
+
+// 365 cards: one for every day of the year.
+export const CARDS = [...BASE, ...CARDS2, ...CARDS3, ...CARDS4, ...CARDS5, ...CARDS6];

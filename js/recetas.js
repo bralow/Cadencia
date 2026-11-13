@@ -1,7 +1,9 @@
 // Argentine classics, written for Cadencia. Steps use voseo imperatives.
 // Ingredient: [amount|null, unit, spanish, english]. Units: g kg ml l u cda cdita diente feta atado
 // Temperatures in steps as [[200C]] so they can switch to °F.
-export const RECETAS = [
+import { RECETAS2, VERBOS2 } from './recetas2.js';
+
+const BASE = [
   {
     id: 'empanadas', name: 'Empanadas de carne', en: 'Beef empanadas', when: 'Todo el año', time: '1 h 30 min', serves: '12 empanadas',
     intro: 'La empanada es el bocado nacional: cada provincia tiene la suya. Esta es una versión clásica, al horno.',
@@ -354,7 +356,7 @@ export const RECETAS = [
 ];
 
 // Cooking verbs in vos imperative -> infinitive, English, and the tú form for contrast.
-export const VERBOS = {
+const BASE_VERBOS = {
   'picá': ['picar', 'chop', 'pica'], 'cortá': ['cortar', 'cut', 'corta'], 'rehogá': ['rehogar', 'sauté gently', 'rehoga'], 'agregá': ['agregar', 'add', 'agrega'],
   'sumá': ['sumar', 'add', 'suma'], 'cociná': ['cocinar', 'cook', 'cocina'], 'condimentá': ['condimentar', 'season', 'condimenta'], 'apagá': ['apagar', 'turn off', 'apaga'],
   'dejá': ['dejar', 'leave, let', 'deja'], 'rellená': ['rellenar', 'fill', 'rellena'], 'cerrá': ['cerrar', 'close', 'cierra'], 'doblá': ['doblar', 'fold', 'dobla'],
@@ -372,3 +374,6 @@ export const VERBOS = {
   'pinchá': ['pinchar', 'prick', 'pincha'], 'salteá': ['saltear', 'sauté', 'saltea'], 'untá': ['untar', 'spread', 'unta'], 'integrá': ['integrar', 'work in, combine', 'integra'],
   'comé': ['comer', 'eat', 'come'], 'retirá': ['retirar', 'remove', 'retira'], 'desmoldá': ['desmoldar', 'unmold', 'desmolda'], 'salá': ['salar', 'salt', 'sala'],
 };
+
+export const RECETAS = [...BASE, ...RECETAS2];
+export const VERBOS = { ...BASE_VERBOS, ...VERBOS2 };

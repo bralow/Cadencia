@@ -1,6 +1,6 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.13-g (Penumbra: Mazo migrado)';
+export const APP_VERSION = '2026.11.13-h (365 tarjetas culturales, 50 recetas)';
 import { h } from './ui.js';
 
 applyTheme();
