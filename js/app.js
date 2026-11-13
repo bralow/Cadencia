@@ -1,6 +1,6 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.13-d (Penumbra: editor de tarjetas)';
+export const APP_VERSION = '2026.11.13-e (Penumbra: práctica, bóveda, crucigrama, estadísticas)';
 import { h } from './ui.js';
 
 applyTheme();
@@ -29,6 +29,10 @@ const routes = {
   repaso: { tab: 'repaso', load: () => import('./screens/repaso.js') },
   sesion: { tab: 'repaso', load: () => import('./screens/sesion.js') },
   tarjeta: { tab: 'repaso', load: () => import('./screens/tarjeta.js') },
+  boveda: { tab: 'repaso', load: () => import('./screens/boveda.js') },
+  vista: { tab: 'repaso', load: () => import('./screens/vista.js') },
+  crucigrama: { tab: 'repaso', load: () => import('./screens/crucigrama.js') },
+  estadisticas: { tab: 'repaso', load: () => import('./screens/estadisticas.js') },
   mazo: { tab: 'repaso', load: () => import('./screens/mazo.js') },
   perfil: { tab: 'perfil', load: () => import('./screens/perfil.js') },
 };

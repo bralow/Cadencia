@@ -47,11 +47,13 @@ export async function render(main) {
 
   const q = await buildQueue();
   const due = q.reviews.length + q.fresh.length + q.counts.learning;
+  const vault = (await db.all('cards')).filter((c) => c.suspended === 'leech').length;
   main.append(h('a', { href: due ? '#/sesion' : '#/repaso', class: 'card', style: 'text-decoration:none;color:inherit;gap:8px' },
     h('div', { class: 'between' }, h('span', { class: 'kicker' }, 'PENUMBRA · REPASO DE HOY'), h('span', { style: 'font-weight:700;color:var(--accent)' }, due ? 'Empezar →' : 'Ver →')),
     h('div', { style: 'display:flex;align-items:baseline;gap:10px' },
       h('span', { style: 'font-family:var(--display);font-size:40px;font-weight:700;line-height:1' }, String(due)),
-      h('span', { class: 'muted small' }, due ? `${q.reviews.length} repaso · ${q.fresh.length} nuevas${q.overdue ? ` · ${q.overdue} vencidas` : ''}` : 'Al día. Guardá palabras con «+ Penumbra» para sumar tarjetas.'))));
+      h('span', { class: 'muted small' }, due ? `${q.reviews.length} repaso · ${q.fresh.length} nuevas${q.overdue ? ` · ${q.overdue} vencidas` : ''}` : 'Al día. Guardá palabras con «+ Penumbra» para sumar tarjetas.')),
+    vault ? h('span', { class: 'muted small' }, `🔒 ${vault} en la bóveda`) : ''));
 
   const card = cardFor(dayNumber());
   main.append(h('a', { href: '#/cultura', class: 'card', style: 'text-decoration:none;color:inherit;gap:6px' },

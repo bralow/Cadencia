@@ -8,6 +8,8 @@ import { Recorder, decode, peaks } from '../audio.js';
 import { log } from '../progress.js';
 import { actionFor } from '../hotkeys.js';
 import { overlay } from '../imgedit.js';
+import { practiceSet, SETS } from '../practica.js';
+import { updateCard } from '../penumbra.js';
 
 const clean = (t) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const esc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -47,7 +49,15 @@ function drawWave(canvas, buf, color) {
 export async function render(main) {
   document.body.classList.add('sesion');
   const st = settings();
-  const q = await buildQueue();
+  // Practice (quiz mode, the vault): #/sesion?modo=practica&set=debiles|olvidar|boveda|todo&deck=<id>&n=20
+  // It uses the same screen but never touches due dates.
+  const hq = new URLSearchParams(location.hash.split('?')[1] || '');
+  const practice = hq.get('modo') === 'practica';
+  const set = hq.get('set') || 'debiles';
+  const q = practice
+    ? { reviews: await practiceSet(set, Number(hq.get('n')) || 20, hq.get('deck') || null), fresh: [], learning: [], overdue: 0, counts: { learning: 0 } }
+    : await buildQueue();
+  const results = new Map(), requeued = new Set();
   const deckName = new Map((await decks()).map((d) => [d.id, d.name]));
   const total0 = q.reviews.length + q.fresh.length + q.learning.length;
   let done = 0, passed = 0, startedAt = Date.now(), timer = 0, keyHandler = null;
@@ -55,7 +65,7 @@ export async function render(main) {
   const counts = h('div', { style: 'display:flex;gap:12px;font-size:13px;font-weight:600' });
   const ring = h('div', { style: 'width:44px;height:44px;position:relative' });
   const bar = h('div', { style: 'height:6px;border-radius:3px;background:var(--line);overflow:hidden' }, h('div', { style: 'height:6px;width:0;background:var(--accent);transition:width .3s' }));
-  const close = h('a', { href: '#/repaso', 'aria-label': 'Terminar el repaso', class: 'icon-btn', style: 'font-size:22px;text-decoration:none;color:var(--ink)' }, '×');
+  const close = h('a', { href: practice && set === 'boveda' ? '#/boveda' : '#/repaso', 'aria-label': 'Terminar el repaso', class: 'icon-btn', style: 'font-size:22px;text-decoration:none;color:var(--ink)' }, '×');
   const editBtn = h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Editar esta tarjeta', style: 'font-size:18px;background:none;border:none;color:var(--ink)' }, '✎');
   const stage = h('div', { style: 'display:flex;flex-direction:column;gap:14px;flex:1' });
   main.append(h('div', { style: 'display:flex;flex-direction:column;gap:10px' }, h('div', { class: 'between', style: 'flex-wrap:nowrap' }, close, counts, h('div', { class: 'row', style: 'gap:4px' }, editBtn, ring)), bar), stage);
@@ -85,6 +95,12 @@ export async function render(main) {
   editBtn.onclick = editCurrent;
 
   const paintCounts = () => {
+    if (practice) {
+      counts.replaceChildren(h('span', { style: 'color:var(--accent)' }, `${q.reviews.length} `, h('span', { class: 'muted', style: 'font-weight:500' }, SETS[set] ? SETS[set].name.toLowerCase() : 'práctica')),
+        h('span', { class: 'chip' }, 'no cambia fechas'));
+      bar.firstChild.style.width = `${Math.min(100, (done / Math.max(1, done + q.reviews.length)) * 100)}%`;
+      return;
+    }
     const lrn = q.learning.length;
     counts.replaceChildren(
       h('span', { style: 'color:var(--accent)' }, `${q.reviews.length} `, h('span', { class: 'muted', style: 'font-weight:500' }, 'repaso')),
@@ -111,6 +127,7 @@ export async function render(main) {
 
   function finish() {
     stopClock(); stopAudio();
+    if (practice) return finishPractice();
     const mins = Math.max(1, Math.round((Date.now() - startedAt) / 60000));
     log('repaso', { cards: done, passed });
     stage.replaceChildren(h('section', { class: 'card', style: 'gap:12px;align-items:center;text-align:center;padding:28px 20px' },
@@ -119,6 +136,25 @@ export async function render(main) {
       done ? h('p', { class: 'muted' }, `${Math.round((passed / done) * 100)}% bien · ${mins} min`) : h('p', { class: 'muted' }, 'Guardá palabras y frases con «+ Penumbra» en cualquier módulo y van a aparecer acá.'),
       q.learning.length ? h('p', { class: 'small' }, `${q.learning.length} tarjeta${q.learning.length > 1 ? 's' : ''} en aprendizaje vuelve${q.learning.length > 1 ? 'n' : ''} más tarde hoy.`) : '',
       h('a', { href: '#/repaso', class: 'btn' }, 'Volver a Repaso')));
+    counts.replaceChildren(); bar.firstChild.style.width = '100%';
+  }
+
+  function finishPractice() {
+    log('practica', { set, cards: done, passed });
+    const firstTry = [...results.values()];
+    const good = firstTry.filter((r) => r.ok).length;
+    const kids = [h('span', { class: 'kicker' }, done ? 'PRÁCTICA TERMINADA' : 'NADA PARA PRACTICAR'),
+      h('h1', { style: 'font-size:30px' }, done ? `${good} de ${firstTry.length}` : 'Vacío'),
+      h('p', { class: 'muted' }, done ? 'bien a la primera. Tus fechas de repaso no cambiaron.' : set === 'boveda' ? 'La bóveda está vacía.' : 'No hay tarjetas para este tipo de práctica todavía.')];
+    // From the vault: the ones you got right can go back to the normal schedule.
+    const back = firstTry.filter((r) => r.ok && r.card.suspended === 'leech');
+    if (set === 'boveda' && back.length) {
+      const all = h('button', { type: 'button', class: 'btn' }, `Reintegrar las ${back.length} que acertaste`);
+      all.onclick = async () => { for (const r of back) await updateCard({ ...r.card, suspended: null, state: 'new', reps: 0, lapses: 0, passStreak: 0, due: undefined, s: undefined, d: undefined, last: undefined }); toast('Vuelven como nuevas'); all.disabled = true; all.textContent = 'Reintegradas'; };
+      kids.push(all);
+    }
+    kids.push(h('a', { href: set === 'boveda' ? '#/boveda' : '#/repaso', class: done ? 'btn ghost' : 'btn' }, 'Volver'));
+    stage.replaceChildren(h('section', { class: 'card', style: 'gap:12px;align-items:center;text-align:center;padding:28px 20px' }, ...kids));
     counts.replaceChildren(); bar.firstChild.style.width = '100%';
   }
 
@@ -165,16 +201,23 @@ export async function render(main) {
       if (revealed) return;
       revealed = true; suggest = s; stopClock();
       face.append(...backPart());
-      const pv = preview(card);
+      const pv = practice ? null : preview(card);
       const fail = h('button', { type: 'button', class: 'btn ghost', style: `flex:1;min-height:64px;flex-direction:column;gap:2px;${s === false ? 'outline:3px solid var(--accent);' : ''}` },
-        h('b', {}, 'Fallé'), h('span', { class: 'small muted' }, `${human(pv.fail)} · 1`));
+        h('b', {}, 'Fallé'), h('span', { class: 'small muted' }, practice ? 'otra vez al final' : `${human(pv.fail)} · 1`));
       const pass = h('button', { type: 'button', class: 'btn', style: `flex:1;min-height:64px;flex-direction:column;gap:2px;${s === true ? 'outline:3px solid var(--gold);' : ''}` },
-        h('b', {}, 'Pasé'), h('span', { class: 'small', style: 'opacity:.85' }, `${human(pv.pass)} · 2`));
+        h('b', {}, 'Pasé'), h('span', { class: 'small', style: 'opacity:.85' }, practice ? 'listo' : `${human(pv.pass)} · 2`));
       fail.onclick = () => grade(false); pass.onclick = () => grade(true);
       actions.replaceChildren(h('div', { class: 'row', style: 'gap:10px' }, fail, pass));
     }
     async function grade(ok) {
       const ms = Date.now() - shownAt;
+      if (practice) {
+        if (!results.has(card.id)) results.set(card.id, { card, ok });
+        q.reviews = q.reviews.filter((c) => c.id !== card.id);
+        if (!ok && !requeued.has(card.id)) { requeued.add(card.id); q.reviews.push(card); }
+        done++; if (ok) passed++;
+        show(); return;
+      }
       const u = await answerCard(q, card, ok, ms);
       done++; if (ok) passed++;
       if (u.suspended === 'leech') toast('Esta tarjeta pasó a la Bóveda: la fallaste muchas veces.');
@@ -285,6 +328,13 @@ export async function render(main) {
         listen()), h('span', { class: 'muted small', style: 'text-align:center' }, '¿Qué significa?'));
       showBtn();
       startTimer(() => reveal(null));
+    }
+
+    // Studying the vault: the example sentence and the hint stay on screen while you think.
+    if (practice && set === 'boveda' && card.type !== 'completar' && (card.hint || card.context)) {
+      const ctx = card.context ? (card.type === 'reconocer' ? card.context : card.context.replace(new RegExp(esc(card.front), 'ig'), '___')) : '';
+      face.insertBefore(h('div', { style: 'background:var(--soft);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:4px' },
+        h('span', { class: 'kicker' }, 'AYUDA'), ctx ? h('span', { style: 'line-height:1.45' }, ctx) : '', card.hint ? h('span', { class: 'muted small' }, card.hint) : ''), face.children[1] || null);
     }
 
     keyHandler = (e) => {

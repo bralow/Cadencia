@@ -38,19 +38,20 @@ export async function render(main) {
     main.append(b);
   }
 
-  // Vault
-  const leeches = (await db.all('cards')).filter((c) => c.suspended === 'leech');
-  if (leeches.length) {
-    main.append(h('section', { class: 'card', style: 'gap:8px' },
-      h('span', { class: 'kicker' }, `BÓVEDA · ${leeches.length}`),
-      h('p', { class: 'muted small' }, 'Tarjetas que fallaste muchas veces. Revisalas, mejoralas y reintegralas cuando quieras.'),
-      ...leeches.slice(0, 20).map((c) => {
-        const back = h('button', { type: 'button', class: 'pill', style: 'min-height:34px;font-size:12px' }, 'Reintegrar');
-        back.onclick = async () => { await updateCard({ ...c, suspended: null, state: 'new', reps: 0, lapses: 0, passStreak: 0, due: undefined }); toast('Vuelve como nueva'); rerender(); };
-        const edit = h('a', { href: `#/tarjeta?note=${encodeURIComponent(c.note)}`, class: 'pill', style: 'min-height:34px;font-size:12px;display:inline-flex;align-items:center;text-decoration:none' }, 'Mejorar');
-        return h('div', { class: 'between', style: 'gap:8px' }, h('span', {}, c.front, h('span', { class: 'muted small' }, ` · ${TYPES[c.type]}`)), h('span', { class: 'row', style: 'gap:6px' }, edit, back));
-      })));
-  }
+  // Vault, practice, crossword, stats
+  const leeches = (await db.all('cards')).filter((c) => c.suspended === 'leech').length;
+  if (leeches) main.append(h('a', { href: '#/boveda', class: 'card', style: 'flex-direction:row;align-items:center;gap:12px;text-decoration:none;color:inherit;padding:12px 14px' },
+    h('span', { style: 'font-size:22px' }, '🔒'), h('span', { style: 'flex:1;display:flex;flex-direction:column' }, h('b', {}, `Bóveda · ${leeches}`), h('span', { class: 'muted small' }, 'tarjetas que fallaste muchas veces: mejoralas y reintegralas')), h('span', { class: 'muted' }, '→')));
+  const nSel = h('select', { 'aria-label': 'Cuántas', style: `${field};width:auto;min-height:40px` }, [10, 20, 30, 50].map((n) => h('option', { value: n }, `${n} tarjetas`)));
+  nSel.value = '20';
+  const go = (set) => { location.hash = `#/sesion?modo=practica&set=${set}&n=${nSel.value}`; };
+  const pbtn = (set, label, help) => { const b = h('button', { type: 'button', class: 'card', style: 'padding:10px 12px;gap:2px;text-align:left;cursor:pointer;font:inherit;color:inherit;flex:1;min-width:140px' }, h('b', {}, label), h('span', { class: 'muted small' }, help)); b.onclick = () => go(set); return b; };
+  main.append(h('section', { class: 'card', style: 'gap:10px' },
+    h('div', { class: 'between' }, h('span', { class: 'kicker' }, 'PRÁCTICA LIBRE'), h('span', { class: 'chip' }, 'no cambia fechas')),
+    h('div', { class: 'row wrap', style: 'gap:8px;align-items:stretch' }, pbtn('debiles', 'Débiles', 'las que más fallaste'), pbtn('olvidar', 'A punto de olvidar', 'las que se te están yendo'), pbtn('todo', 'Mezcla', 'de todos los mazos')),
+    h('div', { class: 'row wrap', style: 'gap:8px' }, nSel,
+      h('a', { href: '#/crucigrama', class: 'pill', style: 'min-height:40px;display:inline-flex;align-items:center;text-decoration:none' }, '✏️ Crucigrama'),
+      h('a', { href: '#/estadisticas', class: 'pill', style: 'min-height:40px;display:inline-flex;align-items:center;text-decoration:none' }, '📊 Estadísticas'))));
 
   // Settings
   let st = settings();
@@ -129,6 +130,9 @@ async function deckView(main, d) {
         return h('div', { class: 'between', style: 'gap:8px;flex-wrap:nowrap;background:var(--soft);border-radius:12px;padding:8px 10px' }, h('span', { class: 'small', style: 'flex:1;min-width:0' }, g.map((n) => `«${n.front}»`).join(' · ')), m);
       }), all);
   };
+  const link = (href, l) => h('a', { href, class: 'pill', style: 'min-height:40px;display:inline-flex;align-items:center;text-decoration:none' }, l);
+  const enc = encodeURIComponent(d.id);
+  main.append(h('div', { class: 'row wrap', style: 'gap:8px' }, link(`#/vista?deck=${enc}`, '👁 Vista previa'), link(`#/sesion?modo=practica&set=todo&n=20&deck=${enc}`, 'Practicar'), link(`#/crucigrama?deck=${enc}`, '✏️ Crucigrama')));
   main.append(h('div', { class: 'row', style: 'gap:8px;flex-wrap:nowrap' }, search, dupBtn), dupBox);
 
   const now = Date.now();
