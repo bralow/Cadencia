@@ -27,10 +27,10 @@ export async function render(main) {
   main.append(h('span', { class: 'kicker', style: 'margin-top:6px' }, 'MAZOS'));
   if (!ds.length) main.append(h('section', { class: 'card' }, h('p', { class: 'muted small', style: 'line-height:1.45' }, 'Todavía no hay tarjetas. Tocá «+ Penumbra» o «Guardar» en cualquier módulo (Leer, Podcast, Charla, Lunfardo…) y aparecen acá, cada una en el mazo de donde vino.')));
   for (const d of ds) {
-    const s = stats.get(d.id) || { total: 0, due: 0, fresh: 0, leech: 0 };
+    const s = stats.get(d.id) || { total: 0, notes: 0, due: 0, fresh: 0, leech: 0 };
     const b = h('button', { type: 'button', class: 'card', style: 'flex-direction:row;align-items:center;gap:12px;text-align:left;cursor:pointer;font:inherit;color:inherit;padding:12px 14px' },
       h('span', { style: `width:8px;height:34px;border-radius:4px;background:${d.color}` }),
-      h('span', { style: 'flex:1;display:flex;flex-direction:column;gap:2px' }, h('b', {}, d.name), h('span', { class: 'muted small' }, `${s.total} tarjetas${s.leech ? ` · ${s.leech} en la bóveda` : ''}`)),
+      h('span', { style: 'flex:1;display:flex;flex-direction:column;gap:2px' }, h('b', {}, d.name), h('span', { class: 'muted small' }, `${s.notes} ${s.notes === 1 ? 'guardada' : 'guardadas'}${s.leech ? ` · ${s.leech} en la bóveda` : ''}`)),
       h('span', { style: 'display:flex;gap:10px;font-weight:700' }, h('span', { style: 'color:var(--accent)' }, String(s.due)), h('span', {}, String(s.fresh))));
     b.onclick = () => { openDeck = d.id; rerender(); };
     main.append(b);
@@ -104,15 +104,21 @@ async function deckView(main, d) {
   const cards = (await db.all('cards')).filter((c) => c.deck === d.id).sort((a, b) => b.created - a.created);
   const back = h('button', { type: 'button', class: 'pill', style: 'min-height:40px' }, '← Mazos');
   back.onclick = () => { openDeck = null; rerender(); };
-  main.append(h('div', { class: 'between' }, back, h('span', { class: 'muted small' }, `${cards.length} tarjetas`)), h('h1', {}, d.name));
+  // One row per saved word or sentence; its practice cards (read, listen, type…) are listed inside it.
+  const notes = new Map();
+  for (const c of cards) { if (!notes.has(c.note)) notes.set(c.note, []); notes.get(c.note).push(c); }
+  main.append(h('div', { class: 'between' }, back, h('span', { class: 'muted small' }, `${notes.size} ${notes.size === 1 ? 'frase o palabra' : 'frases y palabras'}`)), h('h1', {}, d.name));
   const now = Date.now();
   const status = (c) => c.suspended === 'leech' ? 'en la bóveda' : c.suspended === 'mastered' ? 'dominada' : c.state === 'new' ? 'nueva' : c.due <= now ? 'para hoy' : `en ${human(c.due - now)}`;
-  for (const c of cards.slice(0, 300)) {
+  for (const [note, sibs] of [...notes].slice(0, 300)) {
+    const c = sibs[0];
+    sibs.sort((a, b) => a.created - b.created);
     const del = h('button', { type: 'button', class: 'pill', style: 'min-height:32px;font-size:11px' }, 'Borrar');
-    del.onclick = async () => { if (window.confirm(`¿Borrar «${c.front}» (todas sus tarjetas)?`)) { await deleteNote(c.note); rerender(); } };
+    del.onclick = async () => { if (window.confirm(`¿Borrar «${c.front}»?`)) { await deleteNote(note); rerender(); } };
     main.append(h('div', { class: 'card', style: 'gap:4px;padding:10px 12px' },
       h('div', { class: 'between', style: 'gap:8px;flex-wrap:nowrap' }, h('b', { style: 'flex:1;min-width:0' }, c.front), del),
-      h('span', { class: 'muted small' }, `${TYPES[c.type]} · ${status(c)}${c.meaning ? ` · ${c.meaning}` : ''}`)));
+      c.meaning ? h('span', { class: 'small' }, c.meaning) : '',
+      h('span', { class: 'muted small' }, sibs.map((x) => `${TYPES[x.type]}: ${status(x)}`).join(' · '))));
   }
   return () => {};
 }

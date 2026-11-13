@@ -95,12 +95,13 @@ function episodeView(main, ep) {
   const segEls = [], wordEls = [];
   segs.forEach((s, i) => {
     const time = h('button', { type: 'button', 'aria-label': `Escuchar desde ${clock(s.s)}`, style: 'border:none;background:none;color:var(--muted);font:inherit;font-size:11px;font-weight:700;padding:2px 6px 0 0;min-width:38px;text-align:left;cursor:pointer;font-variant-numeric:tabular-nums' }, clock(s.s));
-    time.onclick = () => { seek(s.s); play(); };
+    time.onclick = () => { picked = i; seek(s.s); play(); };
     const words = h('p', { style: 'font-size:17px;line-height:1.6;flex:1', lang: 'es-AR' });
     const ws = s.w && s.w.length ? s.w : [[s.t, s.s, s.e]];
     wordEls[i] = ws.map(([w, a], k) => {
       const span = h('span', { style: 'border-radius:4px;cursor:pointer;padding:0 1px' }, w);
       span.onclick = () => {
+        picked = i;
         if (p.tap === 'ir') { seek(a); play(); return; }
         const word = clean(w);
         if (word) { showWordPanel(panel, word, { context: s.t, tag: '#ArgenTalk' }); panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
@@ -135,7 +136,7 @@ function episodeView(main, ep) {
     transcript, panel, controls);
 
   // --- Playback
-  let loop = false, cur = -1, curWord = null, raf = 0, lastSave = 0, userScroll = 0;
+  let loop = false, picked = -1, cur = -1, curWord = null, raf = 0, lastSave = 0, userScroll = 0;
   const seek = (t) => { audio.currentTime = Math.max(0, t); paint(true); };
   const play = () => { audio.play().catch(() => {}); };
   const setRate = () => { audio.playbackRate = p.speed; audio.defaultPlaybackRate = p.speed; };
@@ -186,12 +187,20 @@ function episodeView(main, ep) {
   nextBtn.onclick = () => { if (segs[cur + 1]) seek(segs[cur + 1].s); };
   speedBtn.onclick = () => { p = setPref({ speed: SPEEDS[(SPEEDS.indexOf(p.speed) + 1) % SPEEDS.length] }); speedBtn.textContent = `${p.speed}x`; setRate(); };
   loopBtn.onclick = () => { loop = !loop; loopBtn.setAttribute('aria-pressed', String(loop)); };
+  let saving = false;
   saveBtn.onclick = async () => {
-    const s = segs[Math.max(0, cur)];
+    if (saving) return;
+    // The sentence you're hearing; when paused, the one you last tapped.
+    const s = segs[!audio.paused && cur >= 0 ? cur : picked >= 0 ? picked : Math.max(0, cur)];
     if (!s) return;
-    await db.put('mazo', { front: s.t, ipa: transcribe(s.t), back: `${ep.show} · ${ep.title} · ${clock(s.s)}`, tag: '#ArgenTalk', created: Date.now(),
-      source: { kind: 'podcast', id: ep.id, s: s.s, e: s.e, label: `${ep.title} · ${clock(s.s)}` } });
-    toast('Guardada en Penumbra');
+    saving = true;
+    try {
+      const key = (x) => String(x || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+      if ((await db.all('cards')).some((c) => key(c.front) === key(s.t))) { toast('Ya está en Penumbra'); return; }
+      await db.put('mazo', { front: s.t, ipa: transcribe(s.t), back: `${ep.show} · ${ep.title} · ${clock(s.s)}`, tag: '#ArgenTalk', created: Date.now(),
+        source: { kind: 'podcast', id: ep.id, s: s.s, e: s.e, label: `${ep.title} · ${clock(s.s)}` } });
+      toast('Guardada en Penumbra');
+    } finally { setTimeout(() => { saving = false; }, 800); }
   };
   bar.oninput = () => { audio.currentTime = Number(bar.value); paint(true); };
   const markScroll = () => { userScroll = Date.now(); };

@@ -1,6 +1,6 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.13-a (Penumbra: repaso)';
+export const APP_VERSION = '2026.11.13-b (Penumbra: sin duplicados)';
 import { h } from './ui.js';
 
 applyTheme();

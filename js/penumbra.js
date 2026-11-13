@@ -173,8 +173,9 @@ export async function deckStats() {
   const all = await db.all('cards'), eod = dayEnd();
   const out = new Map();
   for (const c of all) {
-    const s = out.get(c.deck) || { total: 0, due: 0, fresh: 0, leech: 0, mastered: 0 };
+    const s = out.get(c.deck) || { total: 0, notes: 0, seen: new Set(), due: 0, fresh: 0, leech: 0, mastered: 0 };
     s.total++;
+    if (!s.seen.has(c.note)) { s.seen.add(c.note); s.notes++; }
     if (c.suspended === 'leech') s.leech++;
     else if (c.suspended === 'mastered') s.mastered++;
     else if (c.state === 'new') s.fresh++;
