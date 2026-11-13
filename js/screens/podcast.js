@@ -120,7 +120,7 @@ function episodeView(main, ep) {
   const nextBtn = h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Frase siguiente' }, iconEl('next'));
   const speedBtn = h('button', { type: 'button', class: 'pill', style: 'min-height:38px;font-size:13px;min-width:58px' }, `${p.speed}x`);
   const loopBtn = h('button', { type: 'button', class: 'pill', style: 'min-height:38px;font-size:12px', 'aria-pressed': 'false' }, '🔁 Frase');
-  const saveBtn = h('button', { type: 'button', class: 'pill', style: 'min-height:38px;font-size:12px' }, '+ Mazo');
+  const saveBtn = h('button', { type: 'button', class: 'pill', style: 'min-height:38px;font-size:12px' }, '+ Penumbra');
   const timeEl = h('span', { class: 'muted small', style: 'font-variant-numeric:tabular-nums;white-space:nowrap' }, `0:00 / ${clock(ep.duration)}`);
   const bar = h('input', { type: 'range', min: '0', max: String(Math.round(ep.duration || 1)), step: '1', value: '0', 'aria-label': 'Posición', style: 'width:100%;accent-color:var(--accent)' });
   const controls = h('section', { class: 'card', style: 'position:sticky;bottom:calc(env(safe-area-inset-bottom) + 80px);z-index:5;gap:6px;padding:10px 12px;box-shadow:0 6px 24px rgba(0,0,0,.12)' },
@@ -189,8 +189,9 @@ function episodeView(main, ep) {
   saveBtn.onclick = async () => {
     const s = segs[Math.max(0, cur)];
     if (!s) return;
-    await db.put('mazo', { front: s.t, ipa: transcribe(s.t), back: `${ep.show} · ${ep.title} · ${clock(s.s)}`, tag: '#ArgenTalk', created: Date.now() });
-    toast('Frase guardada en el Mazo');
+    await db.put('mazo', { front: s.t, ipa: transcribe(s.t), back: `${ep.show} · ${ep.title} · ${clock(s.s)}`, tag: '#ArgenTalk', created: Date.now(),
+      source: { kind: 'podcast', id: ep.id, s: s.s, e: s.e, label: `${ep.title} · ${clock(s.s)}` } });
+    toast('Guardada en Penumbra');
   };
   bar.oninput = () => { audio.currentTime = Number(bar.value); paint(true); };
   const markScroll = () => { userScroll = Date.now(); };

@@ -89,3 +89,7 @@ input[type="file"] { display: none; }
 .seg.scroll::-webkit-scrollbar { display: none; }
 .seg.scroll a, .seg.scroll span { flex: none; white-space: nowrap; }
 .between > .seg.scroll + * { margin-left: auto; }
+
+/* Review session: full screen, no tab bar */
+body.sesion .tabbar { display: none; }
+body.sesion #screen { padding-bottom: calc(env(safe-area-inset-bottom) + 20px); min-height: 100vh; display: flex; flex-direction: column; }

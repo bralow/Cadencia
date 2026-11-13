@@ -83,13 +83,13 @@ export function showWordPanel(panel, word, { context = '', tag = '#Lectura' } = 
     if (r.error) toast(`Voz argentina no disponible: ${r.error.message}. Uso la del teléfono.`);
     else if (r.used === 'none') toast('Este teléfono no tiene voz sintética');
   };
-  const save = h('button', { type: 'button', class: 'btn', style: 'flex:1' }, 'Guardar en Mazo');
+  const save = h('button', { type: 'button', class: 'btn', style: 'flex:1' }, '+ Penumbra');
   save.onclick = async () => {
     // Attach the Argentine audio when the voice is set up, so the Anki card can play it.
     let audio = await cachedArgentineAudio(word.toLowerCase());
     if (!audio && ttsReady()) { try { audio = await argentineAudio(word.toLowerCase()); } catch { audio = null; } }
     await db.put('mazo', { front: word.toLowerCase(), ipa, back: context, tag, audio: audio || undefined, created: Date.now() });
-    toast('Guardado en el Mazo');
+    toast('Guardado en Penumbra');
   };
   const lw = a.word;
   panel.replaceChildren(...[

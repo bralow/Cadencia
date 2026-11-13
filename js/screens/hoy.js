@@ -5,6 +5,7 @@ import { transcribe } from '../ipa.js';
 import { Player } from '../audio.js';
 import { streak, phonemeStatus } from '../progress.js';
 import { dayNumber, cardFor } from './cultura.js';
+import { buildQueue } from '../penumbra.js';
 
 // Built-in phrases used until clips are imported.
 const PHRASES = [
@@ -43,6 +44,14 @@ export async function render(main) {
       ? 'Escuchá, grabá tu voz y comparala con la nativa, onda por onda.'
       : 'Importá el paquete de audios de OpenSLR desde Perfil para empezar.'),
     h('a', { class: 'btn', href: clipCount ? '#/sombra' : '#/perfil', style: 'align-self:flex-start;margin-top:6px' }, clipCount ? 'Empezar' : 'Ir a Perfil', iconEl('next'))));
+
+  const q = await buildQueue();
+  const due = q.reviews.length + q.fresh.length + q.counts.learning;
+  main.append(h('a', { href: due ? '#/sesion' : '#/repaso', class: 'card', style: 'text-decoration:none;color:inherit;gap:8px' },
+    h('div', { class: 'between' }, h('span', { class: 'kicker' }, 'PENUMBRA · REPASO DE HOY'), h('span', { style: 'font-weight:700;color:var(--accent)' }, due ? 'Empezar →' : 'Ver →')),
+    h('div', { style: 'display:flex;align-items:baseline;gap:10px' },
+      h('span', { style: 'font-family:var(--display);font-size:40px;font-weight:700;line-height:1' }, String(due)),
+      h('span', { class: 'muted small' }, due ? `${q.reviews.length} repaso · ${q.fresh.length} nuevas${q.overdue ? ` · ${q.overdue} vencidas` : ''}` : 'Al día. Guardá palabras con «+ Penumbra» para sumar tarjetas.'))));
 
   const card = cardFor(dayNumber());
   main.append(h('a', { href: '#/cultura', class: 'card', style: 'text-decoration:none;color:inherit;gap:6px' },

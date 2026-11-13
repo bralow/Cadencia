@@ -1,6 +1,6 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.07-m (canciones)';
+export const APP_VERSION = '2026.11.13-a (Penumbra: repaso)';
 import { h } from './ui.js';
 
 applyTheme();
@@ -26,7 +26,9 @@ const routes = {
   ipa: { tab: 'leer', load: () => import('./screens/ipa.js') },
   libros: { tab: 'leer', load: () => import('./screens/libros.js') },
   recetas: { tab: 'leer', load: () => import('./screens/recetario.js') },
-  mazo: { tab: 'mazo', load: () => import('./screens/mazo.js') },
+  repaso: { tab: 'repaso', load: () => import('./screens/repaso.js') },
+  sesion: { tab: 'repaso', load: () => import('./screens/sesion.js') },
+  mazo: { tab: 'repaso', load: () => import('./screens/mazo.js') },
   perfil: { tab: 'perfil', load: () => import('./screens/perfil.js') },
 };
 

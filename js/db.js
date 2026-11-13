@@ -7,6 +7,7 @@
 //  episodes: { id, show, title, n, duration, segments: [{ s, e, t, w: [[word, start, end]] }] }  (podcast transcripts)
 //  epaudio: { id, blob }                (podcast audio)
 //  songs: { id, show, title, n, duration, blob }  (songs cut from videos)
+//  cards: Penumbra cards (see penumbra.js) · decks: { id, name, color } · revlog: one row per answer
 //  books: { id, title, stories: [{ title, paragraphs }], added }  (imported from the user's own PDFs)
 const DB_NAME = 'cadencia';
 let dbPromise;
@@ -14,7 +15,7 @@ let dbPromise;
 function open() {
   if (!dbPromise) {
     dbPromise = new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB_NAME, 6);
+      const req = indexedDB.open(DB_NAME, 7);
       req.onupgradeneeded = () => {
         const db = req.result;
         if (!db.objectStoreNames.contains('clips')) {
@@ -28,6 +29,9 @@ function open() {
         if (!db.objectStoreNames.contains('episodes')) db.createObjectStore('episodes', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('epaudio')) db.createObjectStore('epaudio', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('songs')) db.createObjectStore('songs', { keyPath: 'id' });
+        if (!db.objectStoreNames.contains('cards')) db.createObjectStore('cards', { keyPath: 'id' });
+        if (!db.objectStoreNames.contains('decks')) db.createObjectStore('decks', { keyPath: 'id' });
+        if (!db.objectStoreNames.contains('revlog')) db.createObjectStore('revlog', { keyPath: 'id', autoIncrement: true });
         if (!db.objectStoreNames.contains('mazo')) db.createObjectStore('mazo', { keyPath: 'id', autoIncrement: true });
       };
       req.onsuccess = () => resolve(req.result);
@@ -52,7 +56,12 @@ export const db = {
   all: (store) => run(store, 'readonly', (s) => s.getAll()),
   get: (store, key) => run(store, 'readonly', (s) => s.get(key)),
   count: (store) => run(store, 'readonly', (s) => s.count()),
-  put: (store, value) => run(store, 'readwrite', (s) => s.put(value)),
+  put: async (store, value) => {
+    const r = await run(store, 'readwrite', (s) => s.put(value));
+    // Every save to the old Mazo also becomes Penumbra cards.
+    if (store === 'mazo') import('./penumbra.js').then((m) => m.fromMazo(value)).catch(() => {});
+    return r;
+  },
   putMany: (store, values) => run(store, 'readwrite', (s) => { values.forEach((v) => s.put(v)); }),
   remove: (store, key) => run(store, 'readwrite', (s) => s.delete(key)),
   clear: (store) => run(store, 'readwrite', (s) => s.clear()),
