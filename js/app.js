@@ -74,3 +74,16 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
   let reloaded = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => { if (!reloaded) { reloaded = true; location.reload(); } });
 }
+
+// The move from /Cadencia/ to /Penumbra/: the old home-screen icon keeps opening this saved copy, so when the
+// new address is live, say so. Same site, so cards and everything else are already there.
+if (/^\/cadencia\//i.test(location.pathname)) {
+  fetch('/Penumbra/manifest.webmanifest', { cache: 'no-store' }).then((r) => {
+    if (!r.ok) return;
+    const bar = h('div', { role: 'alert', style: 'position:fixed;left:12px;right:12px;top:calc(env(safe-area-inset-top) + 10px);z-index:60;background:var(--accent);color:var(--accent-ink);border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:8px;box-shadow:0 8px 30px rgba(0,0,0,.35)' },
+      h('b', {}, 'Penumbra se mudó'),
+      h('span', { style: 'font-size:14px;line-height:1.4' }, 'Abrí la nueva dirección, instalala desde el menú de Chrome («Agregar a la pantalla principal») y borrá este ícono viejo. Tus tarjetas y todo lo demás ya están ahí.'),
+      h('a', { href: '/Penumbra/', style: 'align-self:flex-start;background:var(--accent-ink);color:var(--accent);padding:10px 16px;border-radius:12px;font-weight:700;text-decoration:none' }, 'Abrir Penumbra →'));
+    document.body.append(bar);
+  }).catch(() => {});
+}
