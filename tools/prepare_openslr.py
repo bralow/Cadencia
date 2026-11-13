@@ -1,8 +1,8 @@
 """
-Cadencia clip-pack builder.
+Penumbra clip-pack builder.
 
 Turns the OpenSLR Argentine Spanish download into one .zip you import on your phone
-(Cadencia > Perfil > Importar paquete de clips).
+(Penumbra > Perfil > Clips de audio > Importar paquete).
 
 What it does to each clip: trims silence at both ends, evens out loudness,
 converts to small mono Opus audio, and tags a CEFR level from sentence length.
@@ -12,7 +12,7 @@ Needs: Python 3.9+ and ffmpeg (Windows: `winget install Gyan.FFmpeg`).
 Usage (in the folder where you unzipped the OpenSLR files):
     python prepare_openslr.py "C:\\path\\to\\openslr" --max 1500
 
-Output: cadencia-clips.zip next to this script (or --out PATH).
+Output: penumbra-clips.zip next to this script (or --out PATH).
 """
 import argparse
 import json
@@ -70,10 +70,10 @@ def encode(ffmpeg, src, dst):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Build a Cadencia clip pack from OpenSLR Argentine Spanish.")
+    ap = argparse.ArgumentParser(description="Build a Penumbra clip pack from OpenSLR Argentine Spanish.")
     ap.add_argument("folder", help="Folder holding the unzipped OpenSLR files (.wav + line_index .tsv)")
-    ap.add_argument("--max", type=int, default=1500, help="How many clips to include (default 1500)")
-    ap.add_argument("--out", default=str(Path(__file__).with_name("cadencia-clips.zip")), help="Output .zip path")
+    ap.add_argument("--max", type=int, default=1500, help="How many clips to include (default 1500; use a big number such as 100000 for all of them)")
+    ap.add_argument("--out", default=str(Path(__file__).with_name("penumbra-clips.zip")), help="Output .zip path")
     ap.add_argument("--seed", type=int, default=7, help="Random seed for picking clips")
     args = ap.parse_args()
 
