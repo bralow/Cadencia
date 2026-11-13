@@ -7,6 +7,8 @@ import { APP_VERSION } from '../app.js';
 import { getTts, setTts, VOICES, argentineAudio } from '../tts.js';
 import { Player } from '../audio.js';
 import { getGemini, setGemini, testKey } from '../gemini.js';
+import { HOY_BLOCKS } from './hoy.js';
+import { settings as penSettings, saveSettings as savePen } from '../penumbra.js';
 
 function pillGroup(label, options, value, onPick, { cls = 'grid6', goal = false, fmt = (x) => x } = {}) {
   const btns = options.map((o) => h('button', { type: 'button', class: 'pill' + (goal ? ' goal' : ''), 'aria-pressed': String(o === value) }, fmt(o)));
@@ -24,8 +26,44 @@ export async function render(main) {
     h('p', { class: 'muted small', style: 'line-height:1.4' }, 'Tu nivel elige qué frases te tocan en Sombra: las de tu nivel y las de un nivel arriba o abajo.')));
 
   main.append(h('section', { class: 'card' },
-    pillGroup('Velocidad inicial', ['0.5', '0.75', '1'], s.speed, (v) => setSetting('speed', v), { cls: 'grid3', fmt: (x) => (x === '1' ? '1.0x' : x + 'x') }),
-    pillGroup('Apariencia', ['system', 'light', 'dark'], s.theme, (v) => setSetting('theme', v), { cls: 'grid3', fmt: (x) => ({ system: 'Sistema', light: 'Claro', dark: 'Oscuro' })[x] })));
+    pillGroup('Velocidad inicial', ['0.5', '0.75', '1'], s.speed, (v) => setSetting('speed', v), { cls: 'grid3', fmt: (x) => (x === '1' ? '1.0x' : x + 'x') })));
+
+  // Appearance: theme, accent, density, your name, which blocks Hoy shows.
+  const ACCENTS = [['azul', 'Azul', '#8FA8FF'], ['menta', 'Menta', '#5EEAD4'], ['ambar', 'Ámbar', '#FFB86B'], ['lila', 'Lila', '#E9A8FF']];
+  const swatches = ACCENTS.map(([k, l, c]) => {
+    const b = h('button', { type: 'button', class: 'pill', 'aria-pressed': String((s.accent || 'azul') === k), style: 'display:flex;align-items:center;gap:6px;justify-content:center;min-width:0;border-radius:12px' },
+      h('span', { style: `width:14px;height:14px;border-radius:50%;background:${c};flex:none` }), l);
+    b.onclick = () => { setSetting('accent', k); swatches.forEach((x, i) => x.setAttribute('aria-pressed', String(ACCENTS[i][0] === k))); };
+    return b;
+  });
+  const name = h('input', { type: 'text', value: s.name || '', placeholder: 'Para el saludo de Hoy', 'aria-label': 'Tu nombre', autocomplete: 'given-name',
+    style: 'min-height:46px;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:15px;width:100%' });
+  name.onchange = () => setSetting('name', name.value.trim());
+  const hiddenSet = new Set(s.hoyHidden || []);
+  const blockBoxes = Object.entries(HOY_BLOCKS).map(([k, l]) => {
+    const cb = h('input', { type: 'checkbox' }); cb.checked = !hiddenSet.has(k);
+    cb.onchange = () => { if (cb.checked) hiddenSet.delete(k); else hiddenSet.add(k); setSetting('hoyHidden', [...hiddenSet]); };
+    return h('label', { style: 'display:flex;gap:10px;align-items:center;min-height:36px;cursor:pointer' }, cb, l);
+  });
+  main.append(h('section', { class: 'card' },
+    h('span', { class: 'kicker' }, 'APARIENCIA'),
+    pillGroup('Tema', ['dark', 'light', 'system'], s.theme, (v) => setSetting('theme', v), { cls: 'grid3', fmt: (x) => ({ system: 'Del teléfono', light: 'Claro', dark: 'Oscuro' })[x] }),
+    h('h3', { style: 'font-size:15px;font-weight:700' }, 'Color de acento'), h('div', { style: 'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px' }, swatches),
+    pillGroup('Densidad', ['comoda', 'compacta'], s.density || 'comoda', (v) => setSetting('density', v), { cls: 'grid3', fmt: (x) => ({ comoda: 'Cómoda', compacta: 'Compacta' })[x] }),
+    h('h3', { style: 'font-size:15px;font-weight:700' }, 'Tu nombre'), name,
+    h('details', {}, h('summary', { style: 'font-weight:700;cursor:pointer;font-size:15px' }, 'Qué muestra Hoy'), h('div', { style: 'display:flex;flex-direction:column;margin-top:6px' }, blockBoxes))));
+
+  // Goals (FE-07): shown as meters on Hoy.
+  const g = { reviews: 30, streak: 30, ...(s.goals || {}) };
+  const pen = penSettings();
+  const setGoal = (k, v) => { g[k] = v; setSetting('goals', { ...g }); };
+  main.append(h('section', { class: 'card' },
+    h('span', { class: 'kicker' }, 'METAS'),
+    pillGroup('Repasos por día', ['10', '20', '30', '50', '100'], String(g.reviews), (v) => setGoal('reviews', Number(v)), { cls: 'grid6' }),
+    pillGroup('Tarjetas nuevas por día', ['5', '10', '15', '20', '30'], String(pen.newPerDay), (v) => savePen({ newPerDay: Number(v) }), { cls: 'grid6' }),
+    pillGroup('Meta de racha (días)', ['7', '30', '100', '365'], String(g.streak), (v) => setGoal('streak', Number(v)), { cls: 'grid6' }),
+    pillGroup('Retención buscada', ['0.85', '0.9', '0.95'], String(pen.retention), (v) => savePen({ retention: Number(v) }), { cls: 'grid3', fmt: (x) => `${Math.round(Number(x) * 100)}%` }),
+    h('p', { class: 'muted small', style: 'line-height:1.4' }, 'La retención es cuánto querés recordar al repasar. Más alta = repasos más seguidos (más trabajo, menos olvidos). 90% es el equilibrio habitual.')));
 
   // Argentine voice (Azure)
   const tts = getTts();

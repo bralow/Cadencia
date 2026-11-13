@@ -25,8 +25,8 @@ export const icon = {
   next: '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
   prev: '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>',
   trash: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
-  flourish: '<svg width="140" height="16" viewBox="0 0 140 16" aria-hidden="true"><path d="M4 8 C 12 0, 24 0, 24 8 S 14 15, 12 9 M24 8 H116 M136 8 C 128 0, 116 0, 116 8 S 126 15, 128 9" stroke="#C99A2E" stroke-width="1.5"/><circle cx="70" cy="8" r="3" fill="#B5482A" stroke="none"/></svg>',
-  corner: '<svg width="72" height="72" viewBox="0 0 72 72" aria-hidden="true"><path d="M68 4 C 40 4, 30 14, 30 34 C 30 46, 40 50, 46 44 C 52 38, 46 30, 40 34 M68 4 C 68 30, 58 40, 40 42" stroke="#C99A2E" stroke-width="1.5"/><circle cx="58" cy="16" r="3" fill="#C99A2E" stroke="none"/></svg>',
+  flourish: '<svg width="140" height="16" viewBox="0 0 140 16" aria-hidden="true"><path d="M4 8 C 12 0, 24 0, 24 8 S 14 15, 12 9 M24 8 H116 M136 8 C 128 0, 116 0, 116 8 S 126 15, 128 9" stroke="var(--gold)" stroke-width="1.5"/><circle cx="70" cy="8" r="3" fill="var(--accent)" stroke="none"/></svg>',
+  corner: '<svg width="72" height="72" viewBox="0 0 72 72" aria-hidden="true"><path d="M68 4 C 40 4, 30 14, 30 34 C 30 46, 40 50, 46 44 C 52 38, 46 30, 40 34 M68 4 C 68 30, 58 40, 40 42" stroke="var(--accent)" stroke-width="1.5"/><circle cx="58" cy="16" r="3" fill="var(--accent)" stroke="none"/></svg>',
 };
 
 export function iconEl(name) {

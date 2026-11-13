@@ -22,7 +22,7 @@ function radar(list) {
     const anchor = Math.abs(x - cx) < 10 ? 'middle' : x > cx ? 'start' : 'end';
     const words = s.label.split(' ');
     const lines = words.length > 2 ? [words.slice(0, 2).join(' '), words.slice(2).join(' ')] : [s.label];
-    lines.forEach((ln, k) => svg.append(el('text', { x, y: y + k * 14 - (lines.length - 1) * 7, 'text-anchor': anchor, 'dominant-baseline': 'middle', 'font-size': 12, 'font-weight': 600, fill: 'var(--ink)', 'font-family': 'DM Sans, sans-serif' }, ln)));
+    lines.forEach((ln, k) => svg.append(el('text', { x, y: y + k * 14 - (lines.length - 1) * 7, 'text-anchor': anchor, 'dominant-baseline': 'middle', 'font-size': 12, 'font-weight': 600, fill: 'var(--ink)', 'font-family': 'Inter, sans-serif' }, ln)));
   });
   return svg;
 }

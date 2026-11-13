@@ -1,6 +1,6 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.13-e (Penumbra: práctica, bóveda, crucigrama, estadísticas)';
+export const APP_VERSION = '2026.11.13-f (Penumbra: nuevo look)';
 import { h } from './ui.js';
 
 applyTheme();
