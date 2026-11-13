@@ -20,8 +20,10 @@ Where the songs are comes from, in this order:
 
 Lyrics: a subtitle file with the same name (for example "plimplim 1.srt") gives each song its lyrics.
 A file without one is transcribed with Whisper on the computer, like the ArgenTalk podcast (slow:
-roughly as long as the audio, or longer). The result is saved next to it as "<name>.srt" (and "<name>.letra.json"),
-so it only happens once.
+several times as long as the audio on a normal computer). Each song is transcribed on its own, with the
+singing voice separated from the music first when Demucs is installed (pip install demucs), which helps a lot.
+The result is saved next to it as "<name>.srt" (and "<name>.letra.json"), so it only happens once; correct the
+.srt by hand if you like. --retranscribir "plimplim 4" starts that file over.
 A recording with no spreadsheet, list or chapters is taken as one whole song, named after the file.
 --sin-letra skips lyrics and Whisper altogether. No translations.
 
@@ -211,35 +213,112 @@ def read_srt(path):
 
 
 _model = None
+_sep = None
 
 
-def whisper_lines(ffmpeg, src, model_name):
+def get_whisper(model_name):
+    global _model
+    if _model is not None:
+        return _model
+    try:
+        from faster_whisper import WhisperModel
+    except ImportError:
+        print("  ⚠ Falta Whisper para transcribir (pip install faster-whisper). Sigo sin letra para este archivo.")
+        return None
+    for name in ([model_name] if model_name else ["large-v3-turbo", "medium"]):
+        try:
+            print(f"  Cargando Whisper ({name})… (la primera vez se descarga el modelo, puede tardar)", flush=True)
+            _model = WhisperModel(name, device="cpu", compute_type="int8", cpu_threads=os.cpu_count() or 4)
+            return _model
+        except Exception as err:
+            print(f"  No se pudo cargar {name} ({str(err)[:120]}).")
+    return None
+
+
+def get_separator():
+    """Demucs (optional): takes the singing voice out of the music, which helps Whisper a lot with songs.
+    pip install demucs   (the first time it also downloads its model, about 80 MB)."""
+    global _sep
+    if _sep is not None:
+        return _sep or None
+    try:
+        import torch
+        from demucs.pretrained import get_model
+        from demucs.apply import apply_model
+        model = get_model("htdemucs")
+        model.eval()
+        _sep = (torch, model, apply_model)
+        print("  Separo la voz de la música con Demucs.", flush=True)
+    except Exception as err:
+        _sep = False
+        print(f"  (Sin Demucs: {str(err)[:100]}. Para mejores letras: pip install demucs)", flush=True)
+    return _sep or None
+
+
+def song_audio(ffmpeg, src, start, end):
+    """The song as 16 kHz mono floats for Whisper; with only the voice when Demucs is installed."""
+    import numpy as np
+    sep = get_separator()
+    if sep:
+        torch, model, apply_model = sep
+        sr = model.samplerate
+        raw = subprocess.run([ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-ss", f"{start:.2f}", "-t", f"{end - start:.2f}",
+                              "-i", str(src), "-f", "f32le", "-ac", "2", "-ar", str(sr), "-"], capture_output=True, check=True).stdout
+        wav = torch.from_numpy(np.frombuffer(raw, np.float32).reshape(-1, 2).T.copy())
+        ref = wav.mean(0)
+        wav = (wav - ref.mean()) / (ref.std() + 1e-8)
+        with torch.no_grad():
+            out = apply_model(model, wav[None], device="cpu", split=True, overlap=0.25, progress=False)[0]
+        voice = out[model.sources.index("vocals")] * (ref.std() + 1e-8) + ref.mean()
+        mono = voice.mean(0).numpy().astype(np.float32)
+        pcm = subprocess.run([ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-f", "f32le", "-ar", str(sr), "-ac", "1", "-i", "-",
+                              "-f", "s16le", "-ar", "16000", "-ac", "1", "-"], input=mono.tobytes(), capture_output=True, check=True).stdout
+    else:
+        pcm = subprocess.run([ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-ss", f"{start:.2f}", "-t", f"{end - start:.2f}",
+                              "-i", str(src), "-f", "s16le", "-ac", "1", "-ar", "16000", "-"], capture_output=True, check=True).stdout
+    return np.frombuffer(pcm, np.int16).astype(np.float32) / 32768.0
+
+
+def whisper_lines(ffmpeg, src, model_name, songs):
+    """Transcribes each song of a recording on its own (sung lyrics need different settings from speech)."""
     cache = src.with_suffix(".letra.json")
     if cache.exists():
         return json.loads(cache.read_text(encoding="utf-8"))
-    global _model
-    if _model is None:
-        try:
-            from faster_whisper import WhisperModel
-        except ImportError:
-            print("  ⚠ Falta Whisper para transcribir (pip install faster-whisper). Sigo sin letra para este archivo.")
-            return []
-        name = model_name or "medium"
-        print(f"  Cargando Whisper ({name})… (la primera vez se descarga el modelo)", flush=True)
-        _model = WhisperModel(name, device="cpu", compute_type="int8", cpu_threads=os.cpu_count() or 4)
-    import numpy as np
-    pcm = subprocess.run([ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-i", str(src),
-                          "-f", "s16le", "-ac", "1", "-ar", "16000", "-"], capture_output=True, check=True).stdout
-    audio = np.frombuffer(pcm, np.int16).astype(np.float32) / 32768.0
-    print(f"  Transcribiendo {src.name} ({clock(len(audio) / 16000)})… esto tarda.", flush=True)
-    segs, _ = _model.transcribe(audio, language="es", word_timestamps=True, vad_filter=True, beam_size=5, condition_on_previous_text=False)
+    model = get_whisper(model_name)
+    if model is None:
+        return []
     out = []
-    for sg in segs:
-        words = [[w.word.strip(), round(w.start, 2), round(w.end, 2)] for w in (sg.words or []) if w.word.strip()]
-        out.append({"s": round(sg.start, 2), "e": round(sg.end, 2), "t": sg.text.strip(), "w": words})
-        print(f"    {clock(sg.start)}  {sg.text.strip()[:70]}", flush=True)
+    for song in sorted(songs, key=lambda x: x["start"]):
+        a, b = song["start"], song["end"]
+        print(f"  Transcribiendo «{song['title']}» ({clock(b - a)})…", flush=True)
+        audio = song_audio(ffmpeg, src, a, b)
+        opts = dict(language="es", word_timestamps=True, beam_size=5,
+                    vad_filter=False,                      # the speech filter throws away singing
+                    condition_on_previous_text=True,       # songs repeat; context keeps spelling consistent
+                    initial_prompt=f"Letra de la canción infantil argentina «{song['title']}», de Plim Plim.",
+                    hallucination_silence_threshold=2.0,   # drop invented lines over long instrumental parts
+                    no_speech_threshold=0.6)
+        try:
+            segs, _ = model.transcribe(audio, **opts)
+            segs = list(segs)
+        except TypeError:  # an older faster-whisper without that setting
+            opts.pop("hallucination_silence_threshold")
+            segs, _ = model.transcribe(audio, **opts)
+            segs = list(segs)
+        last = None
+        for sg in segs:
+            text = sg.text.strip()
+            # Typical Whisper inventions on music: very low confidence, endless repeats, lines lasting ages.
+            if not text or sg.avg_logprob < -1.2 or sg.compression_ratio > 2.6 or (sg.end - sg.start) > 20:
+                continue
+            if last and text.lower() == last.lower() and sg.start - out[-1]["e"] < 0.5 and len(text) < 4:
+                continue
+            words = [[w.word.strip(), round(a + w.start, 2), round(a + w.end, 2)] for w in (sg.words or []) if w.word.strip()]
+            out.append({"s": round(a + sg.start, 2), "e": round(a + sg.end, 2), "t": text, "w": words})
+            last = text
+            print(f"    {clock(a + sg.start)}  {text[:70]}", flush=True)
     cache.write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
-    # Also a normal subtitle file, so the recording has its own .srt from now on.
+    # Also a normal subtitle file, so the recording has its own .srt from now on (you can correct it by hand).
     def ts(t):
         ms = int(round(t * 1000))
         return f"{ms // 3600000:02d}:{ms % 3600000 // 60000:02d}:{ms % 60000 // 1000:02d},{ms % 1000:03d}"
@@ -332,7 +411,8 @@ def main():
     ap.add_argument("--repetidas", action="store_true")
     ap.add_argument("--ver", action="store_true", help="Solo mostrar la lista de canciones, sin cortar nada")
     ap.add_argument("--sin-letra", action="store_true", help="No agregar letras ni transcribir")
-    ap.add_argument("--modelo", default="", help="Modelo de Whisper (por defecto: medium)")
+    ap.add_argument("--modelo", default="", help="Modelo de Whisper (por defecto: large-v3-turbo, o medium si no se puede)")
+    ap.add_argument("--retranscribir", default="", help='Volver a transcribir estos archivos, por ejemplo "plimplim 4"')
     args = ap.parse_args()
     faulthandler.enable()
 
@@ -408,6 +488,7 @@ def main():
         return
 
     # Lyrics: from a same-name .srt, or transcribed (once per recording, saved next to it).
+    redo = {norm(x) for x in args.retranscribir.split(",") if x.strip()}
     if not args.sin_letra:
         print("\nLetras…")
         by_src = {}
@@ -415,11 +496,17 @@ def main():
             by_src.setdefault(x["src"], []).append(x)
         for src, group in by_src.items():
             srt = src.with_suffix(".srt")
+            if norm(src.stem) in redo:
+                # Start over: forget the earlier transcription (and the .srt it wrote).
+                for old in (src.with_suffix(".letra.json"), srt):
+                    if old.exists():
+                        old.rename(old.with_name(old.name + ".viejo"))
+                print(f"  {src.name}: transcribo de nuevo (guardé lo anterior como .viejo)")
             if srt.exists():
                 lines = read_srt(srt)
                 print(f"  {src.name}: {len(lines)} líneas de {srt.name}")
             else:
-                lines = whisper_lines(ffmpeg, src, args.modelo)
+                lines = whisper_lines(ffmpeg, src, args.modelo, group)
             for x in group:
                 x["lines"] = lyrics_for(x, lines)
 
