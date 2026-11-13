@@ -1,6 +1,6 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.13-b (Penumbra: sin duplicados)';
+export const APP_VERSION = '2026.11.13-c (podcast: repetir frase)';
 import { h } from './ui.js';
 
 applyTheme();

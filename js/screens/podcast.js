@@ -136,8 +136,8 @@ function episodeView(main, ep) {
     transcript, panel, controls);
 
   // --- Playback
-  let loop = false, picked = -1, cur = -1, curWord = null, raf = 0, lastSave = 0, userScroll = 0;
-  const seek = (t) => { audio.currentTime = Math.max(0, t); paint(true); };
+  let loop = false, loopIdx = -1, picked = -1, cur = -1, curWord = null, raf = 0, lastSave = 0, userScroll = 0;
+  const seek = (t) => { audio.currentTime = Math.max(0, t); if (loop) loopIdx = Math.max(0, segmentAt(segs, t + 0.05)); paint(true); };
   const play = () => { audio.play().catch(() => {}); };
   const setRate = () => { audio.playbackRate = p.speed; audio.defaultPlaybackRate = p.speed; };
   (async () => {
@@ -173,7 +173,8 @@ function episodeView(main, ep) {
       if (curWord) { curWord.style.background = 'var(--sel)'; curWord.style.color = 'var(--sel-ink)'; }
     }
     // Loop the current sentence
-    if (loop && cur >= 0 && t >= segs[cur].e) audio.currentTime = segs[cur].s;
+    // (checked against the sentence you chose, because by the time it ends the highlight has already moved on)
+    if (loop && loopIdx >= 0 && segs[loopIdx] && t >= segs[loopIdx].e) { audio.currentTime = segs[loopIdx].s; return; }
     timeEl.textContent = `${clock(t)} / ${clock(ep.duration || audio.duration)}`;
     if (document.activeElement !== bar) bar.value = String(Math.round(t));
     if (Date.now() - lastSave > 5000) { lastSave = Date.now(); savePosition(ep.id, t, ep.duration || audio.duration); }
@@ -186,7 +187,13 @@ function episodeView(main, ep) {
   prevBtn.onclick = () => { const i = Math.max(0, (audio.currentTime - (cur >= 0 ? segs[cur].s : 0) > 1.5 ? cur : cur - 1)); if (segs[i]) seek(segs[i].s); };
   nextBtn.onclick = () => { if (segs[cur + 1]) seek(segs[cur + 1].s); };
   speedBtn.onclick = () => { p = setPref({ speed: SPEEDS[(SPEEDS.indexOf(p.speed) + 1) % SPEEDS.length] }); speedBtn.textContent = `${p.speed}x`; setRate(); };
-  loopBtn.onclick = () => { loop = !loop; loopBtn.setAttribute('aria-pressed', String(loop)); };
+  loopBtn.onclick = () => {
+    loop = !loop;
+    loopBtn.setAttribute('aria-pressed', String(loop));
+    loopIdx = !loop ? -1 : !audio.paused && cur >= 0 ? cur : picked >= 0 ? picked : Math.max(0, segmentAt(segs, audio.currentTime));
+    if (loop && audio.paused) { audio.currentTime = segs[loopIdx].s; paint(true); }
+    toast(loop ? 'Repitiendo esta frase' : 'Repetición apagada');
+  };
   let saving = false;
   saveBtn.onclick = async () => {
     if (saving) return;
