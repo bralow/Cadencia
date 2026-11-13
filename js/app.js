@@ -1,10 +1,19 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.13-k (Penumbra: arreglo Client ID)';
+export const APP_VERSION = '2026.11.13-l (Penumbra: Google sin ventana emergente)';
 import { h } from './ui.js';
 
 applyTheme();
-import('./sync.js').then((m) => m.startAutoSync()).catch(() => {});
+// Coming back from Google's sign-in page: save the key, clean the address, then sync.
+const fromGoogle = /[#&](access_token|error)=/.test(location.hash);
+import('./sync.js').then((m) => {
+  if (fromGoogle) {
+    const r = m.takeRedirect();
+    route();
+    if (r === 'ok') m.syncNow().then(() => window.dispatchEvent(new Event('cadencia:rerender'))).catch(() => window.dispatchEvent(new Event('cadencia:rerender')));
+  }
+  m.startAutoSync();
+}).catch(() => { if (fromGoogle) route(); });
 
 const routes = {
   hoy: { tab: 'hoy', load: () => import('./screens/hoy.js') },
@@ -66,7 +75,7 @@ async function route() {
 
 window.addEventListener('hashchange', route);
 window.addEventListener('cadencia:rerender', route);
-route();
+if (!fromGoogle) route(); // otherwise route() runs once Google's answer has been read
 
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then((reg) => reg.update()).catch(() => {});

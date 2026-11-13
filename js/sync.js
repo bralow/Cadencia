@@ -164,42 +164,45 @@ const SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
 const API = 'https://www.googleapis.com/drive/v3/files', UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
 const DATA_NAME = 'penumbra-data.json';
 
-let gisReady = null;
-function loadGis() {
-  if (!gisReady) gisReady = new Promise((ok, fail) => {
-    if (window.google && window.google.accounts) { ok(); return; }
-    const s = document.createElement('script');
-    s.src = 'https://accounts.google.com/gsi/client'; s.async = true;
-    s.onload = () => ok(); s.onerror = () => { gisReady = null; fail(new Error('No pude cargar el inicio de sesión de Google (¿sin conexión?).')); };
-    document.head.append(s);
-  });
-  return gisReady;
-}
 const tokenValid = () => { const c = readJSON(DRIVE, {}); return !!(c.token && c.exp && c.exp > Date.now() + 60000); };
 export const driveConnected = () => !!readJSON(DRIVE, {}).connected;
 export const canSyncSilently = () => driveConnected() && tokenValid();
 
-// Must be called from a tap (Google opens a small window; browsers block it otherwise).
-export async function signIn(first = false) {
+// Signing in goes to Google's page in the same window and comes back with a one-hour key in the address
+// (#access_token=…). No pop-up: pop-ups lose track of the app inside installed apps on Android.
+// Google needs this page's address listed under "Authorized redirect URIs" of the client.
+export const redirectUri = () => `${location.origin}${location.pathname}`;
+export function signIn(first = false) {
   const { clientId } = driveConfig();
-  if (!clientId) throw new Error('Falta el Client ID de Google (Perfil → Sincronización).');
-  await loadGis();
-  return new Promise((ok, fail) => {
-    const client = window.google.accounts.oauth2.initTokenClient({
-      client_id: clientId, scope: SCOPE,
-      callback: (r) => {
-        if (r.error) { fail(new Error(r.error_description || r.error)); return; }
-        setDriveConfig({ token: r.access_token, exp: Date.now() + (Number(r.expires_in) || 3600) * 1000, connected: true });
-        ok();
-      },
-      error_callback: (e) => fail(new Error(e && e.type === 'popup_closed' ? 'Cerraste la ventana de Google.' : (e && e.message) || 'Google no respondió.')),
-    });
-    client.requestAccessToken({ prompt: first ? 'consent' : '' });
-  });
+  if (!clientId) return Promise.reject(new Error('Falta el Client ID de Google.'));
+  const state = Math.random().toString(36).slice(2);
+  try { sessionStorage.setItem('penumbra.oauth', JSON.stringify({ state, back: /^#\/sesion/.test(location.hash) ? '#/repaso' : (location.hash || '#/perfil') })); } catch { /* ignore */ }
+  const q = new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri(), response_type: 'token', scope: SCOPE, include_granted_scopes: 'true', state });
+  if (first) q.set('prompt', 'consent select_account');
+  location.href = `https://accounts.google.com/o/oauth2/v2/auth?${q}`;
+  return new Promise(() => {}); // the page is leaving
+}
+// Called once at start-up (app.js): reads Google's answer from the address, saves the key, cleans the address.
+// Returns 'ok', an error text, or null when there was nothing to read.
+export function takeRedirect() {
+  const hash = location.hash;
+  if (!/[#&](access_token|error)=/.test(hash)) return null;
+  const p = new URLSearchParams(hash.replace(/^#/, ''));
+  let saved = {};
+  try { saved = JSON.parse(sessionStorage.getItem('penumbra.oauth') || '{}'); sessionStorage.removeItem('penumbra.oauth'); } catch { /* ignore */ }
+  history.replaceState(null, '', `${location.pathname}${saved.back || '#/perfil'}`);
+  if (saved.state && p.get('state') !== saved.state) { setState({ error: 'La respuesta de Google no coincide. Probá de nuevo.' }); return 'La respuesta de Google no coincide.'; }
+  if (p.get('error')) {
+    const e = p.get('error') === 'access_denied' ? 'No diste permiso en Google.' : `Google respondió: ${p.get('error')}`;
+    setState({ error: e }); return e;
+  }
+  setDriveConfig({ token: p.get('access_token'), exp: Date.now() + (Number(p.get('expires_in')) || 3600) * 1000, connected: true });
+  setState({ error: '' });
+  return 'ok';
 }
 export function disconnect() {
   const c = readJSON(DRIVE, {});
-  if (c.token && window.google && window.google.accounts) try { window.google.accounts.oauth2.revoke(c.token, () => {}); } catch { /* ignore */ }
+  if (c.token) fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(c.token)}`, { method: 'POST' }).catch(() => {});
   setDriveConfig({ token: '', exp: 0, connected: false });
   setState({ lastSync: 0, error: '' });
 }

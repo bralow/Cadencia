@@ -208,12 +208,13 @@ function syncSection() {
     // Google Drive
     box.append(h('h3', { style: 'font-size:15px;font-weight:700' }, 'Google Drive'));
     if (!connected) {
-      box.append(h('p', { class: 'muted small', style: 'line-height:1.45' }, 'Mantiene el teléfono y la compu iguales usando una carpeta oculta de tu propio Drive. Penumbra solo ve esa carpeta, ninguno de tus otros archivos.'));
+      box.append(h('p', { class: 'muted small', style: 'line-height:1.45' }, 'Mantiene el teléfono y la compu iguales usando una carpeta oculta de tu propio Drive. Penumbra solo ve esa carpeta, ninguno de tus otros archivos. Al conectar, vas a la página de Google y volvés solo.'));
+      if (st.error) box.append(h('p', { class: 'small', style: 'color:var(--gold-text)' }, st.error));
       const id = h('input', { type: 'text', value: driveConfig().clientId || '', placeholder: 'Client ID de Google (termina en .apps.googleusercontent.com)', 'aria-label': 'Client ID de Google', autocomplete: 'off', spellcheck: 'false', style: fieldStyle, hidden: !!BUILT_IN_CLIENT_ID });
       const go = h('button', { type: 'button', class: 'btn' }, 'Conectar Google Drive');
       go.onclick = async () => {
         if (!BUILT_IN_CLIENT_ID) setDriveConfig({ clientId: id.value.trim() });
-        status.textContent = 'Abriendo Google…';
+        status.textContent = 'Yendo a Google…';
         try { await signIn(true); status.textContent = 'Conectado. Sincronizando…'; await syncNow({ onProgress: (t) => { status.textContent = t; } }); paint(); toast('Sincronizado con Drive'); }
         catch (e) { status.textContent = `No se pudo conectar: ${e.message || e}`; }
       };
