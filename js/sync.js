@@ -157,7 +157,8 @@ export async function restoreFile(file, onProgress = () => {}) {
 // a hidden folder in your Drive (scope drive.appdata: it can't see any of your other files).
 const DRIVE = 'penumbra.drive';
 export const BUILT_IN_CLIENT_ID = '362565861212-pdrliulid7ml6t06ho5cl0vj01n68f4d.apps.googleusercontent.com';
-export const driveConfig = () => ({ clientId: BUILT_IN_CLIENT_ID, ...readJSON(DRIVE, {}) });
+// The built-in id wins over an empty one saved on the device by an earlier version.
+export const driveConfig = () => { const c = readJSON(DRIVE, {}); return { ...c, clientId: c.clientId || BUILT_IN_CLIENT_ID }; };
 export const setDriveConfig = (patch) => { const v = { ...readJSON(DRIVE, {}), ...patch }; writeJSON(DRIVE, v); return v; };
 const SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
 const API = 'https://www.googleapis.com/drive/v3/files', UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
