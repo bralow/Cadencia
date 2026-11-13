@@ -156,7 +156,7 @@ export async function restoreFile(file, onProgress = () => {}) {
 // A free Google Cloud "OAuth client ID" (web application, origin https://bralow.github.io) lets the app use
 // a hidden folder in your Drive (scope drive.appdata: it can't see any of your other files).
 const DRIVE = 'penumbra.drive';
-export const BUILT_IN_CLIENT_ID = '';
+export const BUILT_IN_CLIENT_ID = '362565861212-pdrliulid7ml6t06ho5cl0vj01n68f4d.apps.googleusercontent.com';
 export const driveConfig = () => ({ clientId: BUILT_IN_CLIENT_ID, ...readJSON(DRIVE, {}) });
 export const setDriveConfig = (patch) => { const v = { ...readJSON(DRIVE, {}), ...patch }; writeJSON(DRIVE, v); return v; };
 const SCOPE = 'https://www.googleapis.com/auth/drive.appdata';

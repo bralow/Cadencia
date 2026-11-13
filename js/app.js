@@ -1,6 +1,6 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.13-i (Penumbra: copia y Google Drive)';
+export const APP_VERSION = '2026.11.13-j (Penumbra: Google Drive conectado)';
 import { h } from './ui.js';
 
 applyTheme();
