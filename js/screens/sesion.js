@@ -135,8 +135,21 @@ export async function render(main) {
       h('h1', { style: 'font-size:30px' }, done ? `${done} tarjetas` : '¡Al día!'),
       done ? h('p', { class: 'muted' }, `${Math.round((passed / done) * 100)}% bien · ${mins} min`) : h('p', { class: 'muted' }, 'Guardá palabras y frases con «+ Penumbra» en cualquier módulo y van a aparecer acá.'),
       q.learning.length ? h('p', { class: 'small' }, `${q.learning.length} tarjeta${q.learning.length > 1 ? 's' : ''} en aprendizaje vuelve${q.learning.length > 1 ? 'n' : ''} más tarde hoy.`) : '',
-      h('a', { href: '#/repaso', class: 'btn' }, 'Volver a Repaso')));
+      h('a', { href: '#/repaso', class: 'btn' }, 'Volver a Repaso'), syncAfter()));
     counts.replaceChildren(); bar.firstChild.style.width = '100%';
+  }
+
+  // After a session: sync quietly if the Google session is fresh; otherwise offer one tap.
+  function syncAfter() {
+    const slot = h('div', { style: 'display:flex;flex-direction:column;align-items:center;gap:6px' });
+    import('../sync.js').then((m) => {
+      if (!m.driveConnected() || !done) return;
+      if (m.canSyncSilently()) { m.syncNow().then(() => slot.replaceChildren(h('span', { class: 'muted small' }, '☁ Sincronizado con Drive'))).catch(() => {}); return; }
+      const b = h('button', { type: 'button', class: 'btn ghost' }, '☁ Sincronizar con Drive');
+      b.onclick = async () => { b.disabled = true; b.textContent = 'Sincronizando…'; try { await m.syncNow({ interactive: true }); slot.replaceChildren(h('span', { class: 'muted small' }, '☁ Sincronizado')); } catch (e) { b.disabled = false; b.textContent = 'Reintentar sincronizar'; toast(String(e.message || e)); } };
+      slot.append(b);
+    });
+    return slot;
   }
 
   function finishPractice() {

@@ -1,9 +1,10 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.13-h (365 tarjetas culturales, 50 recetas)';
+export const APP_VERSION = '2026.11.13-i (Penumbra: copia y Google Drive)';
 import { h } from './ui.js';
 
 applyTheme();
+import('./sync.js').then((m) => m.startAutoSync()).catch(() => {});
 
 const routes = {
   hoy: { tab: 'hoy', load: () => import('./screens/hoy.js') },

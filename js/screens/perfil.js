@@ -8,6 +8,7 @@ import { getTts, setTts, VOICES, argentineAudio } from '../tts.js';
 import { Player } from '../audio.js';
 import { getGemini, setGemini, testKey } from '../gemini.js';
 import { HOY_BLOCKS } from './hoy.js';
+import { backupFile, restoreFile, driveConfig, setDriveConfig, driveConnected, signIn, syncNow, disconnect, syncState, BUILT_IN_CLIENT_ID } from '../sync.js';
 import { settings as penSettings, saveSettings as savePen } from '../penumbra.js';
 
 function pillGroup(label, options, value, onPick, { cls = 'grid6', goal = false, fmt = (x) => x } = {}) {
@@ -184,9 +185,81 @@ export async function render(main) {
     h('div', { class: 'row wrap' }, importBtn, input, clearBtn), status));
   refresh();
 
+  main.append(syncSection());
+
   main.append(h('section', { style: 'padding:4px 4px 0;display:flex;flex-direction:column;gap:6px' },
     h('h3', { class: 'muted', style: 'font-size:13px;font-weight:700;letter-spacing:.08em' }, 'CRÉDITOS'),
     h('p', { class: 'muted small', style: 'line-height:1.45' }, 'Audio: corpus de español argentino de OpenSLR (Google), con licencia ',
       h('a', { href: 'https://creativecommons.org/licenses/by-sa/4.0/', target: '_blank', rel: 'noopener' }, 'CC BY-SA 4.0'), '.'),
     h('p', { class: 'muted small' }, `Versión ${APP_VERSION}`)));
+}
+
+// Sync and backup (FE-01): Google Drive keeps devices identical; the backup file works anywhere, offline.
+function syncSection() {
+  const ago = (t) => { if (!t) return 'nunca'; const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'recién' : m < 60 ? `hace ${m} min` : m < 1440 ? `hace ${Math.round(m / 60)} h` : `hace ${Math.round(m / 1440)} días`; };
+  const box = h('section', { class: 'card' });
+  const status = h('p', { class: 'small', role: 'status', style: 'line-height:1.45' });
+  const fieldStyle = 'min-height:46px;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:14px;width:100%';
+
+  function paint() {
+    const st = syncState(), connected = driveConnected();
+    box.replaceChildren(h('span', { class: 'kicker' }, 'SINCRONIZACIÓN Y COPIA'));
+
+    // Google Drive
+    box.append(h('h3', { style: 'font-size:15px;font-weight:700' }, 'Google Drive'));
+    if (!connected) {
+      box.append(h('p', { class: 'muted small', style: 'line-height:1.45' }, 'Mantiene el teléfono y la compu iguales usando una carpeta oculta de tu propio Drive. Penumbra solo ve esa carpeta, ninguno de tus otros archivos.'));
+      const id = h('input', { type: 'text', value: driveConfig().clientId || '', placeholder: 'Client ID de Google (termina en .apps.googleusercontent.com)', 'aria-label': 'Client ID de Google', autocomplete: 'off', spellcheck: 'false', style: fieldStyle, hidden: !!BUILT_IN_CLIENT_ID });
+      const go = h('button', { type: 'button', class: 'btn' }, 'Conectar Google Drive');
+      go.onclick = async () => {
+        if (!BUILT_IN_CLIENT_ID) setDriveConfig({ clientId: id.value.trim() });
+        status.textContent = 'Abriendo Google…';
+        try { await signIn(true); status.textContent = 'Conectado. Sincronizando…'; await syncNow({ onProgress: (t) => { status.textContent = t; } }); paint(); toast('Sincronizado con Drive'); }
+        catch (e) { status.textContent = `No se pudo conectar: ${e.message || e}`; }
+      };
+      box.append(id, go);
+    } else {
+      const line = st.busy ? 'Sincronizando…' : st.error ? `Último intento falló: ${st.error}` : `Última sincronización: ${ago(st.lastSync)}`;
+      const last = st.last && !st.error ? ` · ${st.last.in} llegaron, ${st.last.out} subieron${st.last.deleted ? `, ${st.last.deleted} borradas` : ''}` : '';
+      const now = h('button', { type: 'button', class: 'btn' }, '☁ Sincronizar ahora');
+      now.onclick = async () => {
+        now.disabled = true;
+        try { const r = await syncNow({ interactive: true, onProgress: (t) => { status.textContent = t; } }); status.textContent = r ? 'Listo.' : ''; toast('Sincronizado'); }
+        catch (e) { status.textContent = `No se pudo: ${e.message || e}`; }
+        paint();
+      };
+      const off = h('button', { type: 'button', class: 'btn ghost' }, 'Desconectar');
+      off.onclick = () => { if (window.confirm('¿Desconectar Google Drive en este dispositivo? Tus datos no se borran.')) { disconnect(); paint(); } };
+      box.append(h('p', { class: 'small' }, line + last), h('div', { class: 'row wrap' }, now, off),
+        h('p', { class: 'muted small', style: 'line-height:1.45' }, 'Sincroniza sola al abrir la app y después de cada cambio, mientras la sesión de Google esté activa (una hora). Si venció, tocá «Sincronizar ahora». Los paquetes de clips, podcast y canciones no viajan: se importan una vez en cada dispositivo.'));
+    }
+
+    // Backup file
+    const dl = h('button', { type: 'button', class: 'btn ghost' }, '⬇ Descargar copia');
+    dl.onclick = async () => {
+      dl.disabled = true; status.textContent = 'Armando la copia…';
+      try {
+        const r = await backupFile();
+        const a = h('a', { href: URL.createObjectURL(r.blob), download: r.name });
+        document.body.append(a); a.click(); a.remove();
+        status.textContent = `Copia lista: ${r.name} (${r.items} cosas guardadas, ${r.blobs} audios e imágenes, ${Math.max(1, Math.round(r.blob.size / 1048576))} MB). Guardala en tu Drive o en la compu.`;
+      } catch (e) { status.textContent = `No se pudo: ${e.message || e}`; }
+      dl.disabled = false;
+    };
+    const file = h('input', { type: 'file', accept: '.zip,application/zip,application/octet-stream', hidden: true });
+    const up = h('button', { type: 'button', class: 'btn ghost' }, '⬆ Restaurar copia');
+    up.onclick = () => file.click();
+    file.onchange = async () => {
+      const f = file.files[0]; file.value = '';
+      if (!f) return;
+      status.textContent = 'Restaurando…';
+      try { const r = await restoreFile(f); status.textContent = `Listo: ${r.in} cosas restauradas${r.deleted ? `, ${r.deleted} borradas` : ''}. Lo que ya tenías acá se mantiene.`; toast('Copia restaurada'); }
+      catch (e) { status.textContent = `No se pudo restaurar: ${e.message || e}`; }
+    };
+    box.append(h('h3', { style: 'font-size:15px;font-weight:700;margin-top:6px' }, 'Copia de seguridad'),
+      h('p', { class: 'muted small', style: 'line-height:1.45' }, `Un archivo con tus tarjetas, repasos, libros, notas, diario y ajustes. Restaurarla combina, no pisa: no perdés nada de lo que hay en este dispositivo. Última copia: ${ago(st.lastBackup)}.`),
+      h('div', { class: 'row wrap' }, dl, up, file), status);
+  }
+  paint();
+  return box;
 }

@@ -102,7 +102,7 @@ export async function render(main) {
     const t = TRABAS[current];
     lay = layout(t);
     kicker.replaceChildren(t.title.toUpperCase(), h('span', { style: 'text-transform:none;letter-spacing:0;font-family:var(--ipa-font);margin-left:6px' }, t.sound));
-    srcEl.textContent = t.src === 'trad' ? 'tradicional' : 'de Cadencia';
+    srcEl.textContent = t.src === 'trad' ? 'tradicional' : 'de Penumbra';
     spans = [];
     textEl.replaceChildren(...lay.parts.map((p) => {
       if (p.text !== undefined) return document.createTextNode(p.text);

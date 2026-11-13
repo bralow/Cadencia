@@ -40,6 +40,23 @@ const DECK_BY_TAG = {
 const PRON_TAGS = new Set(['#Oído', '#Oido', '#IPA', '#Trabalenguas']);
 const DECK_COLORS = ['#3a6ea5', '#b5462a', '#2e7d6b', '#a0761a', '#7b4fa3', '#c2185b', '#5d6d7e', '#00838f'];
 
+// Decks with the same name (made separately on two devices before they synced) become one:
+// the older deck stays, the other's cards move into it. Returns true if anything changed.
+export async function mergeSameNameDecks() {
+  const all = (await db.all('decks')).sort((a, b) => (a.created || 0) - (b.created || 0));
+  const keep = new Map();
+  let changed = false;
+  for (const d of all) {
+    const k = d.name.trim().toLowerCase();
+    if (!keep.has(k)) { keep.set(k, d); continue; }
+    const target = keep.get(k);
+    for (const c of (await db.all('cards')).filter((x) => x.deck === d.id)) await db.put('cards', { ...c, deck: target.id });
+    await db.remove('decks', d.id);
+    changed = true;
+  }
+  return changed;
+}
+
 export async function decks() {
   return (await db.all('decks')).sort((a, b) => a.name.localeCompare(b.name, 'es'));
 }
@@ -47,7 +64,9 @@ export async function ensureDeck(name) {
   const all = await db.all('decks');
   const found = all.find((d) => d.name.toLowerCase() === name.toLowerCase());
   if (found) return found;
-  const d = { id: uid(), name, color: DECK_COLORS[all.length % DECK_COLORS.length], created: Date.now() };
+  // The id comes from the name, so the same deck made on two devices is the same deck when they sync.
+  const slug = name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || uid();
+  const d = { id: `d-${slug}`, name, color: DECK_COLORS[all.length % DECK_COLORS.length], created: Date.now() };
   await db.put('decks', d);
   return d;
 }

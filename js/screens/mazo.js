@@ -63,7 +63,7 @@ export async function render(main) {
       const name = `cadencia-${new Date().toISOString().slice(0, 10)}.apkg`;
       const file = new File([blob], name, { type: 'application/octet-stream' });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        try { await navigator.share({ files: [file], title: 'Cadencia → Anki' }); toast('Elegí AnkiDroid para importarlo'); }
+        try { await navigator.share({ files: [file], title: 'Penumbra → Anki' }); toast('Elegí AnkiDroid para importarlo'); }
         catch (e) { if (e.name !== 'AbortError') download(blob, name); }
       } else download(blob, name);
     } catch (err) {

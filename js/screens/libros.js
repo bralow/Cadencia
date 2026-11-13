@@ -87,7 +87,7 @@ function importCard(main) {
   };
   main.append(h('section', { class: 'card' },
     h('h2', {}, 'Tus libros'),
-    h('p', { class: 'muted small', style: 'line-height:1.45' }, 'Importá un PDF tuyo (por ejemplo, El libro de los abrazos). Cadencia separa los relatos y los guarda solo en este teléfono: no se suben a ningún lado.'),
+    h('p', { class: 'muted small', style: 'line-height:1.45' }, 'Importá un PDF tuyo (por ejemplo, El libro de los abrazos). Penumbra separa los relatos y los guarda solo en este teléfono: no se suben a ningún lado.'),
     btn, input, status));
 }
 

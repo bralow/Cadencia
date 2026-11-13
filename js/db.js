@@ -52,18 +52,48 @@ async function run(store, mode, fn) {
   });
 }
 
+// Stores that sync to Google Drive and go into backups. Every save stamps the time (_u) so the newer
+// version wins when two devices changed the same thing; every delete leaves a tombstone so it syncs too.
+// The packs (clips, audio, episodes, epaudio, songs) and the voice cache (tts) are not synced.
+export const SYNCED = ['cards', 'decks', 'revlog', 'mazo', 'books', 'diario'];
+const SYNCED_SET = new Set(SYNCED);
+// One stable key per record, the same on every device (revlog and mazo have per-device auto ids).
+export function syncKey(store, r) {
+  if (store === 'revlog') return `revlog|${r.ts}|${r.card}`;
+  if (store === 'mazo') return `mazo|${r.created}|${r.front}`;
+  return `${store}|${r.id}`;
+}
+const TOMB = 'penumbra.tomb';
+export function tombstones() { try { return JSON.parse(localStorage.getItem(TOMB) || '{}'); } catch { return {}; } }
+export function saveTombstones(t) { try { localStorage.setItem(TOMB, JSON.stringify(t)); } catch { /* ignore */ } }
+const stamp = (store, v) => { if (SYNCED_SET.has(store) && v && typeof v === 'object') v._u = Date.now(); return v; };
+// Tells the sync module that something changed (it decides whether and when to sync).
+let changeTimer = 0;
+function changed() { clearTimeout(changeTimer); changeTimer = setTimeout(() => window.dispatchEvent(new Event('penumbra:changed')), 1500); }
+
 export const db = {
   all: (store) => run(store, 'readonly', (s) => s.getAll()),
   get: (store, key) => run(store, 'readonly', (s) => s.get(key)),
   count: (store) => run(store, 'readonly', (s) => s.count()),
   put: async (store, value) => {
+    stamp(store, value);
     const r = await run(store, 'readwrite', (s) => s.put(value));
+    if (SYNCED_SET.has(store)) changed();
     // Every save to the old Mazo also becomes Penumbra cards.
     if (store === 'mazo') import('./penumbra.js').then((m) => m.fromMazo(value)).catch(() => {});
     return r;
   },
-  putMany: (store, values) => run(store, 'readwrite', (s) => { values.forEach((v) => s.put(v)); }),
-  remove: (store, key) => run(store, 'readwrite', (s) => s.delete(key)),
+  putMany: (store, values) => { values.forEach((v) => stamp(store, v)); if (SYNCED_SET.has(store)) changed(); return run(store, 'readwrite', (s) => { values.forEach((v) => s.put(v)); }); },
+  remove: async (store, key) => {
+    if (SYNCED_SET.has(store)) {
+      const old = await run(store, 'readonly', (s) => s.get(key));
+      if (old) { const t = tombstones(); t[syncKey(store, old)] = Date.now(); saveTombstones(t); changed(); }
+    }
+    return run(store, 'readwrite', (s) => s.delete(key));
+  },
+  // For sync and restore only: no time stamp, no tombstone, no Mazo hook.
+  rawPut: (store, value) => run(store, 'readwrite', (s) => s.put(value)),
+  rawRemove: (store, key) => run(store, 'readwrite', (s) => s.delete(key)),
   clear: (store) => run(store, 'readwrite', (s) => s.clear()),
   audioFor: async (id) => { const r = await run('audio', 'readonly', (s) => s.get(id)); return r ? r.blob : null; },
 };

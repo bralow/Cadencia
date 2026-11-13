@@ -35,6 +35,20 @@ export async function activity() {
   return days;
 }
 
+// A one-tap sync button when Drive is connected but hasn't synced for a while (Google's session lasts an hour).
+function syncChip() {
+  const slot = h('span', {});
+  import('../sync.js').then((m) => {
+    if (!m.driveConnected() || m.canSyncSilently()) return;
+    const st = m.syncState();
+    if (st.lastSync && Date.now() - st.lastSync < 6 * 3600000) return;
+    const b = h('button', { type: 'button', class: 'pill', 'aria-label': 'Sincronizar con Google Drive', style: 'min-height:36px;font-size:12px' }, '☁ Sincronizar');
+    b.onclick = async () => { b.disabled = true; b.textContent = '☁ …'; try { await m.syncNow({ interactive: true }); b.remove(); toast('Sincronizado'); } catch (e) { b.disabled = false; b.textContent = '☁ Sincronizar'; toast(String(e.message || e)); } };
+    slot.append(b);
+  });
+  return slot;
+}
+
 export async function render(main) {
   const s = getSettings();
   const hidden = new Set(s.hoyHidden || []);
@@ -45,8 +59,9 @@ export async function render(main) {
     h('div', { style: 'display:flex;flex-direction:column;gap:4px' },
       h('span', { class: 'muted small' }, date.charAt(0).toUpperCase() + date.slice(1)),
       h('h1', {}, s.name ? `¡Buenas, ${s.name}!` : '¡Buenas!')),
-    h('a', { href: '#/perfil', class: 'pill', style: 'display:flex;align-items:center;gap:6px;text-decoration:none;min-height:36px;font-size:12px' },
-      h('span', { style: 'width:8px;height:8px;border-radius:50%;background:var(--accent)' }), `${s.level} → ${s.goal}`)));
+    h('div', { class: 'row', style: 'gap:6px' }, syncChip(),
+      h('a', { href: '#/perfil', class: 'pill', style: 'display:flex;align-items:center;gap:6px;text-decoration:none;min-height:36px;font-size:12px' },
+        h('span', { style: 'width:8px;height:8px;border-radius:50%;background:var(--accent)' }), `${s.level} → ${s.goal}`))));
 
   // --- Today's reviews and the goal meters (FE-07)
   const [q, days, cards] = await Promise.all([buildQueue(), activity(), db.all('cards')]);
