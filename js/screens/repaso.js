@@ -1,8 +1,10 @@
 // Repaso: today's review, decks, the vault, settings and creating cards by hand.
 import { h, toast } from '../ui.js';
 import { db } from '../db.js';
-import { buildQueue, decks, deckStats, settings, saveSettings, addNote, fillMeaning, TYPES, deleteNote, updateCard } from '../penumbra.js';
+import { buildQueue, decks, deckStats, settings, saveSettings, TYPES, updateCard } from '../penumbra.js';
 import { human } from '../fsrs.js';
+import { duplicateGroups, merge } from '../cardtools.js';
+import { ACTIONS, keys, setKey, resetKeys, comboOf, label } from '../hotkeys.js';
 
 let openDeck = null;
 const field = 'min-height:46px;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:16px;width:100%';
@@ -14,7 +16,7 @@ export async function render(main) {
   const total = q.reviews.length + q.fresh.length;
   const mins = Math.max(1, Math.round((total + q.counts.learning) * 8 / 60));
 
-  main.append(h('div', { class: 'between' }, h('h1', {}, 'Penumbra'), newCardButton(ds)));
+  main.append(h('div', { class: 'between' }, h('h1', {}, 'Penumbra'), newCardButton()));
   main.append(h('section', { class: 'hero', style: 'gap:10px' },
     h('div', { class: 'between' }, h('span', { class: 'kicker' }, 'REPASO DE HOY'), total ? h('span', { class: 'small', style: 'opacity:.8' }, `≈ ${mins} min`) : ''),
     h('div', { style: 'display:flex;align-items:baseline;gap:10px' },
@@ -45,7 +47,8 @@ export async function render(main) {
       ...leeches.slice(0, 20).map((c) => {
         const back = h('button', { type: 'button', class: 'pill', style: 'min-height:34px;font-size:12px' }, 'Reintegrar');
         back.onclick = async () => { await updateCard({ ...c, suspended: null, state: 'new', reps: 0, lapses: 0, passStreak: 0, due: undefined }); toast('Vuelve como nueva'); rerender(); };
-        return h('div', { class: 'between', style: 'gap:8px' }, h('span', {}, c.front, h('span', { class: 'muted small' }, ` · ${TYPES[c.type]}`)), back);
+        const edit = h('a', { href: `#/tarjeta?note=${encodeURIComponent(c.note)}`, class: 'pill', style: 'min-height:34px;font-size:12px;display:inline-flex;align-items:center;text-decoration:none' }, 'Mejorar');
+        return h('div', { class: 'between', style: 'gap:8px' }, h('span', {}, c.front, h('span', { class: 'muted small' }, ` · ${TYPES[c.type]}`)), h('span', { class: 'row', style: 'gap:6px' }, edit, back));
       })));
   }
 
@@ -59,45 +62,45 @@ export async function render(main) {
   timerSel.onchange = () => { st = saveSettings({ timer: Number(timerSel.value) }); };
   main.append(h('details', { class: 'card', style: 'gap:10px' },
     h('summary', { style: 'font-weight:700;cursor:pointer' }, 'Ajustes de repaso'),
-    h('div', { style: 'display:flex;flex-direction:column;gap:8px;margin-top:10px' }, newSel, timerSel,
+    h('div', { style: 'display:flex;flex-direction:column;gap:8px;margin-top:10px' }, newSel, timerSel, hotkeyPanel(),
       h('p', { class: 'muted small', style: 'line-height:1.4' }, `Una tarjeta pasa a la bóveda después de ${st.leech} fallas y se retira como dominada después de ${st.mastery} aciertos seguidos. El máximo entre repasos es de 6 meses.`))));
   main.append(h('a', { href: '#/mazo', class: 'muted small', style: 'text-align:center;padding:10px' }, 'Mazo antiguo y exportar a Anki →'));
   return () => {};
 }
 
-function newCardButton(ds) {
-  const b = h('button', { type: 'button', class: 'pill', style: 'min-height:42px' }, '+ Nueva tarjeta');
-  b.onclick = () => {
-    const dlg = h('section', { class: 'card', style: 'gap:10px' });
-    const deckSel = h('select', { 'aria-label': 'Mazo', style: field }, [...ds.map((d) => h('option', { value: d.name }, d.name)), h('option', { value: '__new' }, 'Nuevo mazo…')]);
-    if (!ds.length) deckSel.value = '__new';
-    const newDeck = h('input', { type: 'text', placeholder: 'Nombre del mazo', 'aria-label': 'Nombre del mazo nuevo', style: field, hidden: !!ds.length });
-    deckSel.onchange = () => { newDeck.hidden = deckSel.value !== '__new'; };
-    const front = h('input', { type: 'text', placeholder: 'Frente: palabra o frase en español', 'aria-label': 'Frente', lang: 'es-AR', style: field });
-    const meaning = h('input', { type: 'text', placeholder: 'Significado (opcional: si falta, lo completa Gemini)', 'aria-label': 'Significado', style: field });
-    const ctx = h('input', { type: 'text', placeholder: 'Frase de ejemplo (opcional)', 'aria-label': 'Frase de ejemplo', lang: 'es-AR', style: field });
-    const boxes = Object.entries(TYPES).filter(([k]) => k !== 'escuchar').map(([k, l]) => {
-      const cb = h('input', { type: 'checkbox', value: k }); cb.checked = k === 'reconocer' || k === 'producir';
-      return h('label', { class: 'pill', style: 'min-height:36px;gap:6px;display:inline-flex;align-items:center;font-size:13px' }, cb, l);
-    });
-    const save = h('button', { type: 'button', class: 'btn' }, 'Guardar tarjeta');
-    save.onclick = async () => {
-      const deckName = deckSel.value === '__new' ? newDeck.value.trim() : deckSel.value;
-      if (!front.value.trim() || !deckName) { toast('Falta el frente o el mazo'); return; }
-      const types = boxes.map((l) => l.querySelector('input')).filter((x) => x.checked).map((x) => x.value);
-      if (types.includes('completar') && !ctx.value.toLowerCase().includes(front.value.trim().toLowerCase())) { toast('Para «Completar», la frase tiene que incluir la palabra'); return; }
-      const cards = await addNote({ front: front.value, meaning: meaning.value.trim(), back: ctx.value.trim(), deck: deckName, types: types.length ? types : ['reconocer'] });
-      if (!cards.length) { toast('Ya existe en ese mazo'); return; }
-      if (!meaning.value.trim()) fillMeaning(cards).catch(() => {});
-      toast(`${cards.length} tarjeta${cards.length > 1 ? 's' : ''} nueva${cards.length > 1 ? 's' : ''}`);
-      rerender();
-    };
-    dlg.append(h('span', { class: 'kicker' }, 'NUEVA TARJETA'), deckSel, newDeck, front, meaning, ctx, h('div', { class: 'row wrap', style: 'gap:6px' }, boxes), save);
-    b.closest('div').after(dlg);
-    b.disabled = true;
-    front.focus();
+function newCardButton(deckId) {
+  return h('a', { href: `#/tarjeta?new=1${deckId ? `&deck=${encodeURIComponent(deckId)}` : ''}`, class: 'pill', style: 'min-height:42px;display:inline-flex;align-items:center;text-decoration:none' }, '+ Nueva tarjeta');
+}
+
+// Keyboard shortcuts (FE-04): tap an action, then press the key you want for it.
+function hotkeyPanel() {
+  const box = h('div', { style: 'display:flex;flex-direction:column;gap:4px;margin-top:6px' });
+  const paint = () => {
+    const k = keys();
+    let group = '';
+    box.replaceChildren();
+    for (const [a, d] of Object.entries(ACTIONS)) {
+      if (d.group !== group) { group = d.group; box.append(h('span', { class: 'kicker', style: 'margin-top:8px' }, group.toUpperCase())); }
+      const b = h('button', { type: 'button', class: 'pill', style: 'min-height:34px;min-width:84px;font-size:12px;font-family:ui-monospace,monospace' }, label(k[a]));
+      b.onclick = () => {
+        b.textContent = 'Presioná…';
+        const grab = (e) => {
+          const c = comboOf(e); if (!c) return;
+          e.preventDefault(); e.stopPropagation(); document.removeEventListener('keydown', grab, true);
+          const clash = Object.entries(keys()).find(([x, v]) => x !== a && v === c && ACTIONS[x].group === d.group);
+          if (clash) toast(`«${label(c)}» ya es «${ACTIONS[clash[0]].label}»: lo cambié de lugar`), setKey(clash[0], k[a]);
+          setKey(a, c); paint();
+        };
+        document.addEventListener('keydown', grab, true);
+      };
+      box.append(h('div', { class: 'between', style: 'gap:8px;flex-wrap:nowrap' }, h('span', { class: 'small' }, d.label), b));
+    }
+    const reset = h('button', { type: 'button', class: 'pill', style: 'min-height:34px;font-size:12px;align-self:flex-start;margin-top:8px' }, 'Volver a los atajos de fábrica');
+    reset.onclick = () => { resetKeys(); paint(); };
+    box.append(reset);
   };
-  return b;
+  paint();
+  return h('details', { style: 'margin-top:4px' }, h('summary', { style: 'cursor:pointer;font-weight:600' }, 'Atajos de teclado (en la PC)'), box);
 }
 
 async function deckView(main, d) {
@@ -107,18 +110,44 @@ async function deckView(main, d) {
   // One row per saved word or sentence; its practice cards (read, listen, type…) are listed inside it.
   const notes = new Map();
   for (const c of cards) { if (!notes.has(c.note)) notes.set(c.note, []); notes.get(c.note).push(c); }
-  main.append(h('div', { class: 'between' }, back, h('span', { class: 'muted small' }, `${notes.size} ${notes.size === 1 ? 'frase o palabra' : 'frases y palabras'}`)), h('h1', {}, d.name));
+  main.append(h('div', { class: 'between' }, back, newCardButton(d.id)), h('h1', {}, d.name),
+    h('span', { class: 'muted small' }, `${notes.size} ${notes.size === 1 ? 'frase o palabra' : 'frases y palabras'} · tocá una para editarla`));
+
+  // Search and duplicates
+  const search = h('input', { type: 'search', placeholder: 'Buscar en este mazo…', 'aria-label': 'Buscar en este mazo', style: field });
+  const dupBtn = h('button', { type: 'button', class: 'pill', style: 'min-height:40px' }, 'Buscar duplicados');
+  const dupBox = h('div', { style: 'display:flex;flex-direction:column;gap:8px' });
+  dupBtn.onclick = async () => {
+    const groups = await duplicateGroups(d.id);
+    if (!groups.length) { dupBox.replaceChildren(h('p', { class: 'small', style: 'color:var(--accent);font-weight:700' }, '✓ No hay duplicados en este mazo.')); return; }
+    const all = h('button', { type: 'button', class: 'btn', style: 'min-height:42px' }, `Unir los ${groups.length} grupos`);
+    all.onclick = async () => { for (const g of groups) await merge(g); toast('Duplicados unidos'); rerender(); };
+    dupBox.replaceChildren(h('p', { class: 'small' }, 'Al unir, queda la que más practicaste; lo que le falte (significado, foto, audio) se toma de las otras.'),
+      ...groups.map((g) => {
+        const m = h('button', { type: 'button', class: 'pill', style: 'min-height:34px;font-size:12px' }, 'Unir');
+        m.onclick = async () => { await merge(g); toast('Unidas'); rerender(); };
+        return h('div', { class: 'between', style: 'gap:8px;flex-wrap:nowrap;background:var(--soft);border-radius:12px;padding:8px 10px' }, h('span', { class: 'small', style: 'flex:1;min-width:0' }, g.map((n) => `«${n.front}»`).join(' · ')), m);
+      }), all);
+  };
+  main.append(h('div', { class: 'row', style: 'gap:8px;flex-wrap:nowrap' }, search, dupBtn), dupBox);
+
   const now = Date.now();
   const status = (c) => c.suspended === 'leech' ? 'en la bóveda' : c.suspended === 'mastered' ? 'dominada' : c.state === 'new' ? 'nueva' : c.due <= now ? 'para hoy' : `en ${human(c.due - now)}`;
-  for (const [note, sibs] of [...notes].slice(0, 300)) {
-    const c = sibs[0];
+  const list = h('div', { style: 'display:flex;flex-direction:column;gap:10px' });
+  const rows = [...notes].map(([note, sibs]) => {
     sibs.sort((a, b) => a.created - b.created);
-    const del = h('button', { type: 'button', class: 'pill', style: 'min-height:32px;font-size:11px' }, 'Borrar');
-    del.onclick = async () => { if (window.confirm(`¿Borrar «${c.front}»?`)) { await deleteNote(note); rerender(); } };
-    main.append(h('div', { class: 'card', style: 'gap:4px;padding:10px 12px' },
-      h('div', { class: 'between', style: 'gap:8px;flex-wrap:nowrap' }, h('b', { style: 'flex:1;min-width:0' }, c.front), del),
+    const c = sibs[0];
+    const row = h('a', { href: `#/tarjeta?note=${encodeURIComponent(note)}`, class: 'card', style: 'gap:4px;padding:10px 12px;text-decoration:none;color:inherit' },
+      h('div', { class: 'between', style: 'gap:8px;flex-wrap:nowrap' }, h('b', { style: 'flex:1;min-width:0' }, c.front),
+        h('span', { class: 'muted small', style: 'white-space:nowrap' }, `${c.image ? '🖼 ' : ''}${c.audio || c.source ? '🔊 ' : ''}✎`)),
       c.meaning ? h('span', { class: 'small' }, c.meaning) : '',
-      h('span', { class: 'muted small' }, sibs.map((x) => `${TYPES[x.type]}: ${status(x)}`).join(' · '))));
-  }
+      h('span', { class: 'muted small' }, sibs.map((x) => `${TYPES[x.type]}: ${status(x)}`).join(' · ')));
+    row.dataset.q = `${c.front} ${c.meaning || ''} ${c.context || ''}`.toLowerCase();
+    return row;
+  });
+  const draw = () => { const t = search.value.trim().toLowerCase(); list.replaceChildren(...rows.filter((r) => !t || r.dataset.q.includes(t)).slice(0, 300)); };
+  search.oninput = draw;
+  draw();
+  main.append(list);
   return () => {};
 }

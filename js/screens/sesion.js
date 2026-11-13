@@ -6,6 +6,8 @@ import { preview, human } from '../fsrs.js';
 import { phoneSay, stopPhone } from '../voz.js';
 import { Recorder, decode, peaks } from '../audio.js';
 import { log } from '../progress.js';
+import { actionFor } from '../hotkeys.js';
+import { overlay } from '../imgedit.js';
 
 const clean = (t) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const esc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -54,8 +56,33 @@ export async function render(main) {
   const ring = h('div', { style: 'width:44px;height:44px;position:relative' });
   const bar = h('div', { style: 'height:6px;border-radius:3px;background:var(--line);overflow:hidden' }, h('div', { style: 'height:6px;width:0;background:var(--accent);transition:width .3s' }));
   const close = h('a', { href: '#/repaso', 'aria-label': 'Terminar el repaso', class: 'icon-btn', style: 'font-size:22px;text-decoration:none;color:var(--ink)' }, '×');
+  const editBtn = h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Editar esta tarjeta', style: 'font-size:18px;background:none;border:none;color:var(--ink)' }, '✎');
   const stage = h('div', { style: 'display:flex;flex-direction:column;gap:14px;flex:1' });
-  main.append(h('div', { style: 'display:flex;flex-direction:column;gap:10px' }, h('div', { class: 'between', style: 'flex-wrap:nowrap' }, close, counts, ring), bar), stage);
+  main.append(h('div', { style: 'display:flex;flex-direction:column;gap:10px' }, h('div', { class: 'between', style: 'flex-wrap:nowrap' }, close, counts, h('div', { class: 'row', style: 'gap:4px' }, editBtn, ring)), bar), stage);
+  let current = null, editing = false;
+
+  // Editing the card on screen, without leaving the session: after saving, the card shows again with the changes.
+  async function editCurrent() {
+    if (!current || editing) return;
+    editing = true; stopClock(); stopAudio();
+    const { buildEditor } = await import('../editor.js');
+    const { sheet, close: shut } = overlay();
+    sheet.style.background = 'var(--bg)';
+    let clean = null;
+    clean = await buildEditor(sheet, { note: current.note, onDone: async (r) => {
+      if (clean) clean(); shut(); editing = false;
+      if (r === 'saved' || r === 'deleted') {
+        const fresh = await db.get('cards', current.id);
+        for (const k of ['reviews', 'fresh', 'learning']) {
+          const arr = q[k]; const i = arr.findIndex((c) => c.id === current.id);
+          if (i < 0) continue;
+          if (fresh) arr[i] = fresh; else arr.splice(i, 1);
+        }
+      }
+      show();
+    } });
+  }
+  editBtn.onclick = editCurrent;
 
   const paintCounts = () => {
     const lrn = q.learning.length;
@@ -99,6 +126,7 @@ export async function render(main) {
     stopAudio(); paintCounts();
     const card = nextCard(q, done);
     if (!card) return finish();
+    current = card;
     const face = h('section', { class: 'card', style: 'flex:1;gap:14px;padding:20px;min-height:52vh' });
     const actions = h('div', { style: 'display:flex;flex-direction:column;gap:10px' });
     stage.replaceChildren(face, actions);
@@ -107,10 +135,12 @@ export async function render(main) {
       h('span', { class: 'muted small' }, { reconocer: 'Reconocer', producir: 'Producir', escuchar: 'Escuchar', completar: 'Completar', pronunciar: 'Pronunciar' }[card.type] || ''));
     const listen = (label = '▶ Escuchar', rate = 1) => { const b = h('button', { type: 'button', class: 'pill' }, label); b.onclick = () => playCard(card, rate); return b; };
     let revealed = false, suggest = null;
+    const picture = () => h('img', { src: URL.createObjectURL(card.image), alt: '', style: 'max-width:100%;max-height:30vh;border-radius:14px;object-fit:contain;align-self:center' });
 
     // The answer side, shared by every type.
     const backPart = () => {
       const parts = [h('div', { style: 'height:1px;background:var(--line);margin:4px 0' })];
+      if (card.image instanceof Blob && card.type !== 'producir' && card.type !== 'reconocer') parts.push(picture());
       // The word itself only when it was the answer (on the other types it is already on screen).
       if (card.type === 'producir' || card.type === 'escuchar') parts.push(h('div', { style: 'display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center' },
         h('span', { style: 'font-family:var(--display);font-size:26px;font-weight:700' }, card.front),
@@ -164,6 +194,7 @@ export async function render(main) {
       const hint = h('button', { type: 'button', class: 'pill' }, 'Pista');
       hint.onclick = () => { hint.textContent = card.front.split('').map((ch, i) => (i === 0 || ch === ' ' ? ch : '_')).join(' '); };
       face.append(top, h('div', { style: 'flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:8px;text-align:center' },
+        card.image instanceof Blob ? picture() : '',
         h('span', { class: 'muted small' }, '¿Cómo se dice?'), h('span', { style: 'font-family:var(--display);font-size:30px;font-weight:700' }, prompt)), input, h('div', { class: 'row' }, hint));
       const check = () => {
         const r = checkTyped(input.value, card.front);
@@ -248,6 +279,7 @@ export async function render(main) {
     } else {
       // Reconocer
       face.append(top, h('div', { style: 'flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center' },
+        card.image instanceof Blob ? picture() : '',
         h('span', { style: `font-family:var(--display);font-size:${card.front.length > 40 ? 24 : card.front.length > 18 ? 32 : 46}px;font-weight:700;line-height:1.25` }, card.front),
         h('span', { class: 'ipa', style: 'font-size:18px;color:var(--gold-text)' }, card.ipa || ''),
         listen()), h('span', { class: 'muted small', style: 'text-align:center' }, '¿Qué significa?'));
@@ -256,11 +288,21 @@ export async function render(main) {
     }
 
     keyHandler = (e) => {
+      if (editing) return;
       const typing = e.target && /input|textarea/i.test(e.target.tagName) && !e.target.disabled;
-      if (revealed && (e.key === '1' || e.key === '2') && !typing) { e.preventDefault(); grade(e.key === '2'); return; }
-      if (revealed && e.key === 'Enter' && suggest !== null && !typing) { e.preventDefault(); grade(suggest); return; }
-      if (!revealed && (e.key === ' ' || e.key === 'Enter') && !typing) { e.preventDefault(); const b = actions.querySelector('button'); if (b) b.click(); }
-      if (e.key === 'r' && !typing) playCard(card);
+      const a = actionFor(e, revealed ? ['fail', 'pass', 'suggested', 'replay', 'slow', 'edit', 'quit'] : ['show', 'replay', 'slow', 'edit', 'quit']);
+      if (!a) { if (!revealed && e.key === 'Enter' && !typing) { e.preventDefault(); const b = actions.querySelector('button'); if (b) b.click(); } return; }
+      // While typing an answer, only Enter (handled by the field), Esc and Ctrl-combinations count.
+      if (typing && !/^(Ctrl\+|Escape)/.test(e.key === 'Escape' ? 'Escape' : (e.ctrlKey || e.metaKey ? 'Ctrl+' : ''))) return;
+      e.preventDefault();
+      if (a === 'fail') grade(false);
+      else if (a === 'pass') grade(true);
+      else if (a === 'suggested') { if (suggest !== null) grade(suggest); }
+      else if (a === 'show') { const b = actions.querySelector('button'); if (b) b.click(); }
+      else if (a === 'replay') playCard(card);
+      else if (a === 'slow') playCard(card, 0.75);
+      else if (a === 'edit') editCurrent();
+      else if (a === 'quit') location.hash = '#/repaso';
     };
   }
 

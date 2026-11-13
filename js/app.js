@@ -1,6 +1,6 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.13-c (podcast: repetir frase)';
+export const APP_VERSION = '2026.11.13-d (Penumbra: editor de tarjetas)';
 import { h } from './ui.js';
 
 applyTheme();
@@ -28,6 +28,7 @@ const routes = {
   recetas: { tab: 'leer', load: () => import('./screens/recetario.js') },
   repaso: { tab: 'repaso', load: () => import('./screens/repaso.js') },
   sesion: { tab: 'repaso', load: () => import('./screens/sesion.js') },
+  tarjeta: { tab: 'repaso', load: () => import('./screens/tarjeta.js') },
   mazo: { tab: 'repaso', load: () => import('./screens/mazo.js') },
   perfil: { tab: 'perfil', load: () => import('./screens/perfil.js') },
 };
