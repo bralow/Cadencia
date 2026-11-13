@@ -20,7 +20,9 @@ Where the songs are comes from, in this order:
 
 Lyrics: a subtitle file with the same name (for example "plimplim 1.srt") gives each song its lyrics.
 A file without one is transcribed with Whisper on the computer, like the ArgenTalk podcast (slow:
-roughly as long as the audio, or longer; the result is saved as "<name>.letra.json" so it only happens once).
+roughly as long as the audio, or longer). The result is saved next to it as "<name>.srt" (and "<name>.letra.json"),
+so it only happens once.
+A recording with no spreadsheet, list or chapters is taken as one whole song, named after the file.
 --sin-letra skips lyrics and Whisper altogether. No translations.
 
 Needs Python and ffmpeg; for transcription also faster-whisper (pip install faster-whisper).
@@ -237,6 +239,14 @@ def whisper_lines(ffmpeg, src, model_name):
         out.append({"s": round(sg.start, 2), "e": round(sg.end, 2), "t": sg.text.strip(), "w": words})
         print(f"    {clock(sg.start)}  {sg.text.strip()[:70]}", flush=True)
     cache.write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
+    # Also a normal subtitle file, so the recording has its own .srt from now on.
+    def ts(t):
+        ms = int(round(t * 1000))
+        return f"{ms // 3600000:02d}:{ms % 3600000 // 60000:02d}:{ms % 60000 // 1000:02d},{ms % 1000:03d}"
+    srt = src.with_suffix(".srt")
+    if not srt.exists():
+        srt.write_text("\n".join(f"{i}\n{ts(x['s'])} --> {ts(x['e'])}\n{x['t']}\n" for i, x in enumerate(out, 1)), encoding="utf-8")
+        print(f"  Guardé {srt.name}")
     return out
 
 
@@ -361,7 +371,13 @@ def main():
             else:
                 chs = chapters(ffprobe, f)
             if not chs:
-                print(f"  ⚠ {f.name}: no tiene capítulos. Poné al lado un {f.stem}.txt con la lista de la descripción de YouTube.")
+                # No sheet, no list, no chapters: the whole recording is one song, named after the file.
+                total = file_duration(ffprobe, f)
+                if total <= 0:
+                    print(f"  ⚠ {f.name}: no pude leer la duración. Lo salteo.")
+                    continue
+                print(f"  {f.name}: sin planilla ni capítulos, lo tomo como una sola canción ({clock(total)})")
+                songs.append({"src": f, "start": 0.0, "end": total, "title": f.stem})
                 continue
             for c in chs:
                 t = norm(c["title"])
