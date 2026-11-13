@@ -30,7 +30,7 @@ async function importSongs(zip, onProgress) {
     const bytes = await zip.get(s.file);
     if (!bytes) continue;
     await db.put('songs', { id: `${m.show || 'Canciones'}|${s.id}`, show: m.show || 'Canciones', title: s.title, n: s.n, duration: s.duration,
-      blob: new Blob([bytes.slice()], { type: 'audio/ogg' }) });
+      lines: s.lines || [], blob: new Blob([bytes.slice()], { type: 'audio/ogg' }) });
     onProgress(++done, list.length);
   }
   return { kind: 'songs', n: done, show: m.show, pack: m.pack, packs: m.packs };

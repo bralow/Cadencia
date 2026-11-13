@@ -116,7 +116,7 @@ export function openAudioEditor(blob) {
 // Start and end markers on a long recording. Nothing is copied: the card keeps pointing at the episode.
 export function openMarkerEditor(src) {
   return new Promise(async (resolve) => {
-    const rec = await db.get('epaudio', src.id);
+    const rec = await db.get(src.kind === 'song' ? 'songs' : 'epaudio', src.id);
     if (!rec) { toast('No encuentro el audio del episodio'); resolve(null); return; }
     const { sheet, close } = overlay();
     const url = URL.createObjectURL(rec.blob);

@@ -8,8 +8,8 @@ let mode = 'flip';
 async function play(c) {
   stopPhone();
   if (c.audio instanceof Blob) { new Audio(URL.createObjectURL(c.audio)).play().catch(() => {}); return; }
-  if (c.source && c.source.kind === 'podcast') {
-    const r = await db.get('epaudio', c.source.id);
+  if (c.source && (c.source.kind === 'podcast' || c.source.kind === 'song')) {
+    const r = await db.get(c.source.kind === 'song' ? 'songs' : 'epaudio', c.source.id);
     if (r) { const a = new Audio(URL.createObjectURL(r.blob)); await new Promise((ok) => { a.onloadedmetadata = ok; setTimeout(ok, 1500); }); a.currentTime = c.source.s; a.play().catch(() => {}); setTimeout(() => a.pause(), (c.source.e - c.source.s) * 1000 + 200); return; }
   }
   phoneSay(c.front);

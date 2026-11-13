@@ -12,12 +12,13 @@ async function entriesFor(deckId) {
   for (const c of await db.all('cards')) {
     if ((deckId && c.deck !== deckId) || seen.has(c.note)) continue;
     const word = c.front.trim().replace(ARTICLE, '');
-    if (/\s/.test(word)) continue; // single words only
+    const parts = word.split(/\s+/);
+    if (parts.length > 2) continue; // single words, or two joined (San Martín → SANMARTIN)
     const ctx = c.context && new RegExp(word, 'i').test(c.context) ? c.context.replace(new RegExp(word, 'ig'), '___') : '';
     const clue = c.meaning || ctx || c.hint;
     if (!clue) continue;
     seen.add(c.note);
-    out.push({ front: word, clue, note: c.note });
+    out.push({ front: word, clue: parts.length > 1 ? `${clue} (2 palabras)` : clue, note: c.note });
   }
   for (let i = out.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [out[i], out[j]] = [out[j], out[i]]; }
   return out;
@@ -36,6 +37,25 @@ export async function render(main) {
   main.append(h('div', { class: 'between' }, back, h('span', { class: 'chip' }, 'no cambia fechas')), h('h1', {}, 'Crucigrama'),
     h('div', { class: 'row', style: 'gap:8px;flex-wrap:nowrap' }, sel, again), body);
   sel.onchange = () => { deckId = sel.value; make(); };
+  // Ready-made decks: Historia and Lugares (from the culture cards).
+  const have = new Set(ds.map((d) => d.name));
+  if (!have.has('Historia') || !have.has('Lugares')) {
+    const add = h('button', { type: 'button', class: 'btn ghost', style: 'align-self:flex-start' }, '+ Agregar los mazos Historia y Lugares');
+    add.onclick = async () => {
+      add.disabled = true; add.textContent = 'Agregando…';
+      const { HISTORIA, LUGARES } = await import('../crucigramadata.js');
+      const { addNote } = await import('../penumbra.js');
+      let n = 0;
+      for (const [deck, list] of [['Historia', HISTORIA], ['Lugares', LUGARES]]) {
+        if (have.has(deck)) continue;
+        // One card each: you read the clue and write the answer, like in the crossword.
+        for (const [front, meaning] of list) if ((await addNote({ front, meaning, deck, tag: '#Trivia', types: ['producir'] })).length) n++;
+      }
+      toast(`${n} tarjetas nuevas en Historia y Lugares`);
+      window.dispatchEvent(new Event('cadencia:rerender'));
+    };
+    body.before(add, h('p', { class: 'muted small', style: 'line-height:1.4' }, 'Son tarjetas de verdad: también entran a tu repaso diario, dentro de tus nuevas por día.'));
+  }
   again.onclick = () => make();
   let cleanup = () => {};
 

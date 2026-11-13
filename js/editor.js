@@ -111,8 +111,8 @@ export async function buildEditor(el, { note, deckId, onDone }) {
   async function playIt() {
     stopPlay();
     if (audio) { player = new Audio(URL.createObjectURL(audio)); player.play().catch(() => {}); return; }
-    if (source && source.kind === 'podcast') {
-      const r = await db.get('epaudio', source.id);
+    if (source && (source.kind === 'podcast' || source.kind === 'song')) {
+      const r = await db.get(source.kind === 'song' ? 'songs' : 'epaudio', source.id);
       if (r) { player = new Audio(URL.createObjectURL(r.blob)); await new Promise((ok) => { player.onloadedmetadata = ok; setTimeout(ok, 1500); }); player.currentTime = source.s; player.play().catch(() => {}); const p = player; setTimeout(() => p.pause(), (source.e - source.s) * 1000 + 200); return; }
     }
     phoneSay(front.value);
@@ -124,12 +124,12 @@ export async function buildEditor(el, { note, deckId, onDone }) {
       stopPlay(); try { await rec.start(); recBtn.textContent = '■ Parar'; } catch { toast('Necesito permiso para el micrófono'); }
     });
     const what = audio ? `Clip propio · ${Math.max(1, Math.round(audio.size / 1024))} KB`
-      : source && source.kind === 'podcast' ? `Del podcast: ${source.label || ''} (${(source.e - source.s).toFixed(1)} s)`
+      : source && (source.kind === 'podcast' || source.kind === 'song') ? `${source.kind === 'song' ? 'De la canción' : 'Del podcast'}: ${source.label || ''} (${(source.e - source.s).toFixed(1)} s)`
         : 'Sin audio propio: se lee con la voz del teléfono';
     audBox.replaceChildren(h('span', { class: 'small' }, what), h('div', { class: 'row wrap', style: 'gap:6px' },
       btn('▶ Escuchar', playIt),
       audio ? btn('Editar audio', async () => { stopPlay(); const out = await openAudioEditor(audio); if (out) { audio = out; dirty = true; paintAud(); } }) : '',
-      !audio && source && source.kind === 'podcast' ? btn('Ajustar marcas', async () => { stopPlay(); const m = await openMarkerEditor(source); if (m) { source = { ...source, ...m }; dirty = true; paintAud(); } }) : '',
+      !audio && source && (source.kind === 'podcast' || source.kind === 'song') ? btn('Ajustar marcas', async () => { stopPlay(); const m = await openMarkerEditor(source); if (m) { source = { ...source, ...m }; dirty = true; paintAud(); } }) : '',
       recBtn, btn('Elegir archivo', () => audFile.click()),
       audio ? btn('Quitar', () => { audio = null; dirty = true; paintAud(); }) : ''), audFile);
   }

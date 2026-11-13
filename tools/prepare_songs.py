@@ -1,10 +1,16 @@
 """
-Cadencia song-pack builder (for example Plim Plim videos you have).
+Penumbra song-pack builder (for example Plim Plim audio or videos you have).
 
-Cuts each song out of long videos and turns it into a small audio file for the app.
+Cuts each song out of long recordings and turns it into a small audio file for the app, with its
+lyrics when there are any.
 Where the songs are comes from, in this order:
   1. a spreadsheet "canciones.csv" in the folder, if there is one (see below), or
-  2. a text file with the same name as the video or MP3 (for example "plimplim 1.txt" next to
+  2. an Excel file with the same name as the MP3 (for example "plimplim 1.xlsx" next to
+     "plimplim 1.mp3"), one row per song:   Canción | Inicio | Fin
+     Fin can be left empty: the song then ends where the next one starts. A header row is fine.
+     Write times as 0:03:15 (h:mm:ss) or 3:15; if Excel turns 3:15 into "3:15:00" the script notices
+     and reads it as minutes and seconds. Or
+  3. a text file with the same name as the video or MP3 (for example "plimplim 1.txt" next to
      "plimplim 1.mp3") holding the chapter list copied from the YouTube description:
          0:00 Intro
          3:15 Lavarse las manos
@@ -12,7 +18,12 @@ Where the songs are comes from, in this order:
      Each song ends where the next one starts; the last one ends with the file. Or
   3. the chapters inside each video file (most downloaded .webm videos keep them).
 
-Needs only Python and ffmpeg (the same as for the clips). No transcription, no translation.
+Lyrics: a subtitle file with the same name (for example "plimplim 1.srt") gives each song its lyrics.
+A file without one is transcribed with Whisper on the computer, like the ArgenTalk podcast (slow:
+roughly as long as the audio, or longer; the result is saved as "<name>.letra.json" so it only happens once).
+--sin-letra skips lyrics and Whisper altogether. No translations.
+
+Needs Python and ffmpeg; for transcription also faster-whisper (pip install faster-whisper).
 
 Usage (PowerShell, in the folder with this script):
     python prepare_songs.py "C:\\path\\to\\plimplim"
@@ -29,11 +40,14 @@ canciones.csv (export from Excel or Google Sheets as CSV), one row per song:
     plimplim_ep1.webm,3:15,5:40,Lavarse las manos
 Times can be m:ss or h:mm:ss. Commas or semicolons both work.
 
-Output: folder "cadencia-canciones" next to this script with canciones-1.zip, canciones-2.zip …
+Output: folder "penumbra-canciones" next to this script with canciones-1.zip, canciones-2.zip …
 to import on your phone (Perfil > Importar paquete). These songs are for your personal use; do not
 upload them anywhere public.
 """
 import argparse
+import faulthandler
+import os
+import xml.etree.ElementTree as ET
 import csv
 import json
 import re
@@ -104,6 +118,141 @@ def file_duration(ffprobe, path):
         return 0.0
 
 
+# ---------- Excel (.xlsx) without extra packages: an .xlsx is a zip of XML files ----------
+NS = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+
+
+def read_xlsx(path):
+    """Rows of the first sheet as lists of str/float (empty cells become '')."""
+    with zipfile.ZipFile(path) as z:
+        shared = []
+        if "xl/sharedStrings.xml" in z.namelist():
+            for si in ET.fromstring(z.read("xl/sharedStrings.xml")).findall("m:si", NS):
+                shared.append("".join(t.text or "" for t in si.iter(f"{{{NS['m']}}}t")))
+        sheet = sorted(n for n in z.namelist() if re.match(r"xl/worksheets/sheet\d+\.xml$", n))[0]
+        rows = []
+        for row in ET.fromstring(z.read(sheet)).iter(f"{{{NS['m']}}}row"):
+            cells = {}
+            for c in row.findall("m:c", NS):
+                ref, kind = c.get("r", ""), c.get("t", "")
+                col = 0
+                for ch in re.match(r"[A-Z]+", ref).group(0):
+                    col = col * 26 + ord(ch) - 64
+                v = c.find("m:v", NS)
+                if kind == "s" and v is not None:
+                    val = shared[int(v.text)]
+                elif kind == "inlineStr":
+                    val = "".join(t.text or "" for t in c.iter(f"{{{NS['m']}}}t"))
+                elif v is not None and v.text is not None:
+                    try:
+                        val = float(v.text)
+                    except ValueError:
+                        val = v.text
+                else:
+                    val = ""
+                cells[col] = val
+            if cells:
+                rows.append([cells.get(i, "") for i in range(1, max(cells) + 1)])
+    return rows
+
+
+def excel_time(v, total):
+    """A cell as seconds. Excel stores times as a fraction of a day; '3:15' typed in Excel becomes
+    3 h 15 min, so a time longer than the whole recording is read as minutes:seconds instead."""
+    if isinstance(v, float):
+        sec = v * 86400 if v < 1 else v  # a plain number is taken as seconds
+    else:
+        if not TIME_RE.fullmatch(v.strip()) and not re.fullmatch(r"\d+(\.\d+)?", v.strip()):
+            return None
+        sec = to_seconds(v)
+    if total and sec > total + 1 and sec / 60 <= total + 1:
+        sec /= 60
+    return round(sec, 2)
+
+
+def read_song_sheet(path, src, ffprobe):
+    total = file_duration(ffprobe, src)
+    rows, songs = read_xlsx(path), []
+    for r in rows:
+        times, title = [], ""
+        for v in r:
+            if v == "" or v is None:
+                continue
+            # Excel times are fractions of a day (< 1); a whole number is a song number, not a time.
+            t = excel_time(v, total) if (isinstance(v, float) and v < 1) or (isinstance(v, str) and TIME_RE.fullmatch(v.strip())) else None
+            if t is not None:
+                times.append(t)
+            elif not title and isinstance(v, str):
+                title = v.strip()
+        if not times:
+            continue  # header or empty row
+        songs.append({"start": times[0], "end": times[1] if len(times) > 1 else None, "title": title})
+    songs.sort(key=lambda x: x["start"])
+    for i, x in enumerate(songs):
+        if x["end"] is None or x["end"] <= x["start"]:
+            x["end"] = songs[i + 1]["start"] if i + 1 < len(songs) else total
+    return [x for x in songs if x["end"] > x["start"]]
+
+
+# ---------- Lyrics: .srt files, or Whisper for recordings without one ----------
+def read_srt(path):
+    text = path.read_text(encoding="utf-8-sig", errors="replace").replace("\r", "")
+    out = []
+    for block in re.split(r"\n\s*\n", text):
+        m = re.search(r"(\d+:\d+:\d+[,.]\d+)\s*-->\s*(\d+:\d+:\d+[,.]\d+)\s*\n(.*)", block, re.S)
+        if not m:
+            continue
+        line = re.sub(r"<[^>]+>|\{[^}]+\}", "", m.group(3)).strip().replace("\n", " ")
+        if line:
+            out.append({"s": to_seconds(m.group(1)), "e": to_seconds(m.group(2)), "t": re.sub(r"\s+", " ", line)})
+    return out
+
+
+_model = None
+
+
+def whisper_lines(ffmpeg, src, model_name):
+    cache = src.with_suffix(".letra.json")
+    if cache.exists():
+        return json.loads(cache.read_text(encoding="utf-8"))
+    global _model
+    if _model is None:
+        try:
+            from faster_whisper import WhisperModel
+        except ImportError:
+            print("  ⚠ Falta Whisper para transcribir (pip install faster-whisper). Sigo sin letra para este archivo.")
+            return []
+        name = model_name or "medium"
+        print(f"  Cargando Whisper ({name})… (la primera vez se descarga el modelo)", flush=True)
+        _model = WhisperModel(name, device="cpu", compute_type="int8", cpu_threads=os.cpu_count() or 4)
+    import numpy as np
+    pcm = subprocess.run([ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-i", str(src),
+                          "-f", "s16le", "-ac", "1", "-ar", "16000", "-"], capture_output=True, check=True).stdout
+    audio = np.frombuffer(pcm, np.int16).astype(np.float32) / 32768.0
+    print(f"  Transcribiendo {src.name} ({clock(len(audio) / 16000)})… esto tarda.", flush=True)
+    segs, _ = _model.transcribe(audio, language="es", word_timestamps=True, vad_filter=True, beam_size=5, condition_on_previous_text=False)
+    out = []
+    for sg in segs:
+        words = [[w.word.strip(), round(w.start, 2), round(w.end, 2)] for w in (sg.words or []) if w.word.strip()]
+        out.append({"s": round(sg.start, 2), "e": round(sg.end, 2), "t": sg.text.strip(), "w": words})
+        print(f"    {clock(sg.start)}  {sg.text.strip()[:70]}", flush=True)
+    cache.write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
+    return out
+
+
+def lyrics_for(song, lines):
+    """The lines inside one song, with times counted from the start of the song."""
+    a, b, out = song["start"], song["end"], []
+    for ln in lines:
+        mid = (ln["s"] + ln["e"]) / 2
+        if a <= mid < b:
+            item = {"s": round(max(0, ln["s"] - a), 2), "e": round(min(b, ln["e"]) - a, 2), "t": ln["t"]}
+            if ln.get("w"):
+                item["w"] = [[w, round(max(0, s - a), 2), round(e - a, 2)] for w, s, e in ln["w"] if a <= s < b]
+            out.append(item)
+    return out
+
+
 def read_chapter_txt(path, src, ffprobe):
     """YouTube-style chapter list: a time and a title on each line, in either order."""
     marks = []
@@ -156,7 +305,7 @@ def read_csv(path, files_by_name):
 def encode(ffmpeg, src, start, end, dst):
     tmp = dst.with_suffix(".part.ogg")
     # -ss/-to after -i would be exact but slow on long videos; before -i is fast and accurate for audio.
-    cmd = [ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{start:.2f}", "-i", str(src), "-t", f"{end - start:.2f}",
+    cmd = [ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{start:.2f}", "-i", str(src), "-t", f"{end - start:.2f}",
            "-vn", "-af", f"afade=t=in:d=0.3,afade=t=out:st={max(0, end - start - 0.6):.2f}:d=0.6,loudnorm=I=-16:TP=-1.5:LRA=11",
            "-ac", "2", "-ar", "48000", "-c:a", "libopus", "-b:a", "64k", str(tmp)]
     subprocess.run(cmd, check=True)
@@ -164,15 +313,18 @@ def encode(ffmpeg, src, start, end, dst):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Corta canciones de videos largos para Cadencia.")
+    ap = argparse.ArgumentParser(description="Corta canciones de audios o videos largos para Penumbra, con su letra.")
     ap.add_argument("folder")
-    ap.add_argument("--out", default=str(Path(__file__).with_name("cadencia-canciones")))
+    ap.add_argument("--out", default=str(Path(__file__).with_name("penumbra-canciones")))
     ap.add_argument("--show", default="Plim Plim")
     ap.add_argument("--minimo", type=float, default=40)
     ap.add_argument("--saltar", default="intro,créditos,creditos,presentación,presentacion,suscrib,trailer,adelanto")
     ap.add_argument("--repetidas", action="store_true")
     ap.add_argument("--ver", action="store_true", help="Solo mostrar la lista de canciones, sin cortar nada")
+    ap.add_argument("--sin-letra", action="store_true", help="No agregar letras ni transcribir")
+    ap.add_argument("--modelo", default="", help="Modelo de Whisper (por defecto: medium)")
     args = ap.parse_args()
+    faulthandler.enable()
 
     ffmpeg, ffprobe = shutil.which("ffmpeg"), shutil.which("ffprobe")
     if not ffmpeg or not ffprobe:
@@ -196,7 +348,13 @@ def main():
         print(f"Busco las canciones de {len(files)} archivos…")
         songs, skip = [], [norm(w) for w in args.saltar.split(",") if w.strip()]
         for f in files:
-            txt = f.with_suffix(".txt")
+            txt, xlsx = f.with_suffix(".txt"), f.with_suffix(".xlsx")
+            if xlsx.exists():
+                chs = read_song_sheet(xlsx, f, ffprobe)
+                print(f"  {f.name}: {len(chs)} canciones de {xlsx.name}")
+                for c in chs:
+                    songs.append({"src": f, "start": c["start"], "end": c["end"], "title": c["title"] or f"Canción {len(songs) + 1}"})
+                continue
             if txt.exists():
                 chs = read_chapter_txt(txt, f, ffprobe)
                 print(f"  {f.name}: {len(chs)} capítulos de {txt.name}")
@@ -233,6 +391,22 @@ def main():
         print("\nSolo lista (--ver). Corré sin --ver para cortarlas.")
         return
 
+    # Lyrics: from a same-name .srt, or transcribed (once per recording, saved next to it).
+    if not args.sin_letra:
+        print("\nLetras…")
+        by_src = {}
+        for x in songs:
+            by_src.setdefault(x["src"], []).append(x)
+        for src, group in by_src.items():
+            srt = src.with_suffix(".srt")
+            if srt.exists():
+                lines = read_srt(srt)
+                print(f"  {src.name}: {len(lines)} líneas de {srt.name}")
+            else:
+                lines = whisper_lines(ffmpeg, src, args.modelo)
+            for x in group:
+                x["lines"] = lyrics_for(x, lines)
+
     out = Path(args.out)
     (out / "audio").mkdir(parents=True, exist_ok=True)
     print("\nCortando y comprimiendo…")
@@ -256,14 +430,14 @@ def main():
     for k, group in enumerate(packs, 1):
         manifest = {"type": "songs", "show": args.show, "pack": k, "packs": len(packs), "songs": [
             {"id": s["id"], "title": s["title"], "n": songs.index(s) + 1, "duration": round(s["end"] - s["start"], 1),
-             "file": f"audio/{s['id']}.ogg", "source": s["src"].stem} for s in group]}
+             "file": f"audio/{s['id']}.ogg", "source": s["src"].stem, "lines": s.get("lines", [])} for s in group]}
         zpath = out / f"canciones-{k}.zip"
         with zipfile.ZipFile(zpath, "w", compression=zipfile.ZIP_STORED) as z:
             for s in group:
                 z.write(s["audio"], f"audio/{s['id']}.ogg")
             z.writestr("canciones.json", json.dumps(manifest, ensure_ascii=False))
         print(f"\n{zpath.name}: {len(group)} canciones, {zpath.stat().st_size / 1e6:.0f} MB")
-    print(f"\nListo. Pasá los .zip de {out} al teléfono e importalos en Perfil.")
+    print(f"\nListo. Pasá los .zip de {out} al teléfono y a la compu e importalos en Perfil.")
 
 
 if __name__ == "__main__":

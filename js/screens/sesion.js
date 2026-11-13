@@ -24,8 +24,8 @@ async function playCard(card, rate = 1) {
     player = new Audio(URL.createObjectURL(card.audio)); player.playbackRate = rate; player.preservesPitch = true;
     return player.play().catch(() => {});
   }
-  if (src && src.kind === 'podcast') {
-    const rec = await db.get('epaudio', src.id);
+  if (src && (src.kind === 'podcast' || src.kind === 'song')) {
+    const rec = await db.get(src.kind === 'song' ? 'songs' : 'epaudio', src.id);
     if (rec) {
       player = new Audio(URL.createObjectURL(rec.blob)); player.playbackRate = rate; player.preservesPitch = true;
       await new Promise((r) => { player.onloadedmetadata = r; setTimeout(r, 1500); });
@@ -37,7 +37,7 @@ async function playCard(card, rate = 1) {
   }
   return phoneSay(card.front, { rate });
 }
-const hasRealAudio = (c) => c.audio instanceof Blob || (c.source && c.source.kind === 'podcast');
+const hasRealAudio = (c) => c.audio instanceof Blob || (c.source && (c.source.kind === 'podcast' || c.source.kind === 'song'));
 
 function drawWave(canvas, buf, color) {
   const ctx = canvas.getContext('2d'), w = canvas.width = canvas.clientWidth * 2, ht = canvas.height = 96;
@@ -251,7 +251,7 @@ export async function render(main) {
       hint.onclick = () => { hint.textContent = card.front.split('').map((ch, i) => (i === 0 || ch === ' ' ? ch : '_')).join(' '); };
       face.append(top, h('div', { style: 'flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:8px;text-align:center' },
         card.image instanceof Blob ? picture() : '',
-        h('span', { class: 'muted small' }, '¿Cómo se dice?'), h('span', { style: 'font-family:var(--display);font-size:30px;font-weight:700' }, prompt)), input, h('div', { class: 'row' }, hint));
+        h('span', { class: 'muted small' }, card.tag === '#Trivia' ? '¿Qué o quién es?' : '¿Cómo se dice?'), h('span', { style: 'font-family:var(--display);font-size:30px;font-weight:700' }, prompt)), input, h('div', { class: 'row' }, hint));
       const check = () => {
         const r = checkTyped(input.value, card.front);
         input.disabled = true;

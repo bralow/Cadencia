@@ -1,6 +1,6 @@
 import { applyTheme } from './settings.js';
 
-export const APP_VERSION = '2026.11.13-l (Penumbra: Google sin ventana emergente)';
+export const APP_VERSION = '2026.11.13-m (letras de canciones, mazos Historia y Lugares)';
 import { h } from './ui.js';
 
 applyTheme();
