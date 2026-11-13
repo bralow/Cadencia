@@ -45,7 +45,7 @@ export async function render(main) {
     const save = h('button', { type: 'button', class: 'pill', style: 'min-height:40px' }, 'Guardar en Mazo');
     save.onclick = async () => {
       await db.put('mazo', { front: e.w, ipa: transcribe(e.w), back: `${e.es} (${e.en}) · ${e.ej}`, tag: '#Lunfardo', created: Date.now() });
-      toast('Guardado en el Mazo');
+      toast('Guardado en Penumbra');
     };
     return h('article', { class: 'card', style: 'gap:8px' },
       h('div', { class: 'between', style: 'align-items:flex-start' },

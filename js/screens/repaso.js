@@ -1,7 +1,7 @@
 // Repaso: today's review, decks, the vault, settings and creating cards by hand.
 import { h, toast } from '../ui.js';
 import { db } from '../db.js';
-import { buildQueue, decks, deckStats, settings, saveSettings, TYPES, updateCard } from '../penumbra.js';
+import { buildQueue, decks, deckStats, settings, saveSettings, TYPES, updateCard, pendingMazo, migrateMazo, fillMeanings } from '../penumbra.js';
 import { human } from '../fsrs.js';
 import { duplicateGroups, merge } from '../cardtools.js';
 import { ACTIONS, keys, setKey, resetKeys, comboOf, label } from '../hotkeys.js';
@@ -24,6 +24,10 @@ export async function render(main) {
       h('span', {}, 'tarjetas para hoy')),
     h('div', { class: 'small', style: 'opacity:.9' }, `${q.reviews.length} repaso · ${q.fresh.length} nuevas · ${q.overdue} vencidas${q.counts.learning ? ` · ${q.counts.learning} aprendiendo` : ''}`),
     h('a', { href: '#/sesion', class: 'btn', style: 'align-self:stretch;justify-content:center' }, total + q.counts.learning ? 'Empezar repaso' : 'Ver')));
+
+  // Step 6: bring the old Mazo over.
+  const pending = await pendingMazo();
+  if (pending.length) main.append(migrateCard(pending));
 
   // Decks
   main.append(h('span', { class: 'kicker', style: 'margin-top:6px' }, 'MAZOS'));
@@ -67,6 +71,40 @@ export async function render(main) {
       h('p', { class: 'muted small', style: 'line-height:1.4' }, `Una tarjeta pasa a la bóveda después de ${st.leech} fallas y se retira como dominada después de ${st.mastery} aciertos seguidos. El máximo entre repasos es de 6 meses.`))));
   main.append(h('a', { href: '#/mazo', class: 'muted small', style: 'text-align:center;padding:10px' }, 'Mazo antiguo y exportar a Anki →'));
   return () => {};
+}
+
+function migrateCard(pending) {
+  const tags = new Map();
+  for (const r of pending) tags.set(r.tag || 'sin etiqueta', (tags.get(r.tag || 'sin etiqueta') || 0) + 1);
+  const status = h('p', { class: 'small', 'aria-live': 'polite', style: 'line-height:1.45' });
+  const bar = h('div', { class: 'progress', hidden: true }, h('div', { style: 'width:0' }));
+  const go = h('button', { type: 'button', class: 'btn' }, `Pasar ${pending.length} a Penumbra`);
+  const card = h('section', { class: 'hero', style: 'gap:10px' },
+    h('span', { class: 'kicker' }, 'MAZO ANTIGUO'),
+    h('b', { style: 'font-family:var(--display);font-size:22px' }, `${pending.length} tarjeta${pending.length === 1 ? '' : 's'} para pasar`),
+    h('p', { class: 'small', style: 'line-height:1.45' }, `Cada una va al mazo de donde vino (${[...tags].map(([t, n]) => `${t.replace('#', '')} ${n}`).join(', ')}) y empieza como nueva. Las que ya están en Penumbra se saltean. El Mazo antiguo no se borra: sigue sirviendo para exportar a Anki.`),
+    bar, status, go);
+  go.onclick = async () => {
+    go.disabled = true; bar.hidden = false;
+    const fill = (a, b) => { bar.firstChild.style.width = `${(a / Math.max(1, b)) * 100}%`; };
+    status.textContent = 'Pasando…';
+    const r = await migrateMazo((a, b) => { fill(a, b); status.textContent = `Pasando… ${a} de ${b}`; });
+    const names = new Map((await decks()).map((d) => [d.id, d.name]));
+    status.textContent = `Listo: ${r.created} nueva${r.created === 1 ? '' : 's'}${r.skipped ? ` · ${r.skipped} ya estaba${r.skipped === 1 ? '' : 'n'}` : ''}. ${[...r.decks].map(([id, n]) => `${names.get(id)} ${n}`).join(' · ')}`;
+    go.hidden = true;
+    if (r.notes.length) {
+      status.append(h('br'), 'Completando significados con Gemini…');
+      fill(0, 1);
+      try {
+        const n = await fillMeanings(r.notes, (a, b) => { fill(a, b); status.lastChild.textContent = `Completando significados con Gemini… ${a} de ${b}`; });
+        status.lastChild.textContent = n ? `Significados: ${n} completados.` : 'Sin clave de Gemini: los significados se pueden completar después desde el editor (✨ Revisar con IA).';
+      } catch (e) { status.lastChild.textContent = `No pude completar los significados (${String(e.message || e).slice(0, 60)}). Podés hacerlo después desde el editor.`; }
+    }
+    const done = h('button', { type: 'button', class: 'btn ghost' }, 'Ver mis mazos');
+    done.onclick = rerender;
+    card.append(done);
+  };
+  return card;
 }
 
 function newCardButton(deckId) {

@@ -35,7 +35,7 @@ const DECK_BY_TAG = {
   '#Lectura': 'Lectura', '#Charla': 'Charla', '#Escribir': 'Escribir y Diario', '#Diario': 'Escribir y Diario',
   '#Sombra': 'Sombra', '#Vos': 'Vos', '#Oído': 'Pronunciación', '#Oido': 'Pronunciación', '#IPA': 'Pronunciación',
   '#Trabalenguas': 'Pronunciación', '#Cultura': 'Cultura', '#FraseDelDía': 'Frases', '#Recetas': 'Recetas',
-  '#Recetario': 'Recetas', '#Cognados': 'Cognados',
+  '#Recetario': 'Recetas', '#Cocina': 'Recetas', '#Cognados': 'Cognados',
 };
 const PRON_TAGS = new Set(['#Oído', '#Oido', '#IPA', '#Trabalenguas']);
 const DECK_COLORS = ['#3a6ea5', '#b5462a', '#2e7d6b', '#a0761a', '#7b4fa3', '#c2185b', '#5d6d7e', '#00838f'];
@@ -86,6 +86,67 @@ export async function fromMazo(rec) {
   const cards = await addNote({ front: rec.front, back: rec.back || '', ipa: rec.ipa, tag: rec.tag || '', audio: rec.audio, source: rec.source });
   if (cards.length) fillMeaning(cards).catch(() => {});
   return cards;
+}
+
+// --- Step 6: moving the old Mazo into Penumbra. Each Mazo item becomes a note in the deck its tag points to.
+// Done items are remembered by id (the Mazo itself stays, for the Anki export).
+const MIG = 'penumbra.migrated';
+const migrated = () => { try { return new Set(JSON.parse(localStorage.getItem(MIG) || '[]')); } catch { return new Set(); } };
+export async function pendingMazo() {
+  const done = migrated();
+  const have = new Set((await db.all('cards')).map((c) => strip(c.front)));
+  const out = [];
+  for (const r of await db.all('mazo')) {
+    if (done.has(r.id)) continue;
+    if (have.has(strip(r.front || ''))) { done.add(r.id); continue; } // already turned into cards when it was saved
+    out.push(r);
+  }
+  try { localStorage.setItem(MIG, JSON.stringify([...done])); } catch { /* ignore */ }
+  return out.sort((a, b) => a.created - b.created);
+}
+export async function migrateMazo(onProgress = () => {}) {
+  const items = await pendingMazo();
+  const done = migrated();
+  const made = [], decksUsed = new Map();
+  let skipped = 0;
+  for (let i = 0; i < items.length; i++) {
+    const r = items[i];
+    const cards = await addNote({ front: r.front, back: r.back || '', ipa: r.ipa, tag: r.tag || '', audio: r.audio, source: r.source });
+    if (cards.length) { made.push(cards); decksUsed.set(cards[0].deck, (decksUsed.get(cards[0].deck) || 0) + 1); } else skipped++;
+    done.add(r.id);
+    if (i % 10 === 9 || i === items.length - 1) { try { localStorage.setItem(MIG, JSON.stringify([...done])); } catch { /* ignore */ } onProgress(i + 1, items.length); }
+  }
+  return { total: items.length, created: made.length, skipped, decks: decksUsed, notes: made.map((c) => c[0].note) };
+}
+
+// Meanings for many notes at once: one Gemini request per 20, instead of one per card.
+export async function fillMeanings(noteIds, onProgress = () => {}) {
+  const { geminiReady, ask } = await import('./gemini.js');
+  if (!geminiReady()) return 0;
+  const all = await db.all('cards');
+  const byNote = new Map();
+  for (const c of all) if (noteIds.includes(c.note)) { if (!byNote.has(c.note)) byNote.set(c.note, []); byNote.get(c.note).push(c); }
+  const todo = [...byNote].filter(([, cs]) => !cs[0].meaning);
+  let done = 0;
+  for (let i = 0; i < todo.length; i += 20) {
+    const batch = todo.slice(i, i + 20);
+    const list = batch.map(([, cs], k) => `${k + 1}. «${cs[0].front}»${cs[0].back ? ` — nota: «${cs[0].back.slice(0, 160)}»` : ''}`).join('\n');
+    try {
+      const r = await ask({
+        system: 'Sos un diccionario rioplatense-inglés para un estudiante cuya lengua es el inglés. Respondés solo JSON.',
+        turns: [{ role: 'user', text: `Para cada ítem (palabra o frase en español rioplatense), dame el significado en inglés: breve para palabras (2 a 6 palabras), una traducción natural para frases. Usá la nota si ayuda a entender el sentido. "hint": nota muy corta en español sobre registro o uso rioplatense, o vacío.\n${list}\nDevolvé {"items": [{"n": 1, "meaning": "...", "hint": "..."}]}` }],
+        json: true, temperature: 0.2, fast: true,
+      });
+      for (const it of r.items || []) {
+        const entry = batch[Number(it.n) - 1];
+        if (!entry || !it.meaning) continue;
+        for (const c of entry[1]) { const cur = await db.get('cards', c.id); if (cur && !cur.meaning) await db.put('cards', { ...cur, meaning: String(it.meaning), hint: cur.hint || String(it.hint || '') }); }
+        done++;
+      }
+    } catch (e) { if (i === 0) throw e; } // first batch failing (no key, quota) stops; later hiccups are skipped
+    onProgress(Math.min(todo.length, i + 20), todo.length);
+  }
+  return done;
 }
 
 // Short English meaning for word cards, from Gemini when a key is set (best effort, in the background).

@@ -126,7 +126,7 @@ export async function render(main) {
     save.onclick = async () => {
       const other = q.pair.find((w) => w !== q.word);
       await db.put('mazo', { front: q.clip.text, ipa: transcribe(q.clip.text), back: `${q.word} ${transcribe(q.word)} · no ${other} ${transcribe(other)}`, tag: '#Oído', audio: (await db.audioFor(q.clip.id)) || undefined, created: Date.now() });
-      toast('Guardado en el Mazo');
+      toast('Guardado en Penumbra');
     };
     const next = h('button', { type: 'button', class: 'btn', style: 'align-self:stretch' }, idx < round.length - 1 ? 'Siguiente' : 'Ver resultado');
     next.onclick = () => { if (idx < round.length - 1) { idx++; show(); } else finish(); };

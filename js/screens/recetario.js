@@ -112,7 +112,7 @@ function detail(main, r) {
     const listen = h('button', { type: 'button', class: 'pill', style: 'background:transparent;color:var(--hero-ink);border-color:var(--hero-muted);min-height:40px' }, '▶ Escuchar');
     listen.onclick = () => speak(word);
     const save = h('button', { type: 'button', class: 'pill', style: 'min-height:40px' }, 'Guardar en Mazo');
-    save.onclick = async () => { await db.put('mazo', { front: word, ipa: transcribe(word), back: `${inf} · to ${en} · tú: ${tu} · ${temps(stepText, 'metric')}`, tag: '#Cocina', created: Date.now() }); toast('Guardado en el Mazo'); };
+    save.onclick = async () => { await db.put('mazo', { front: word, ipa: transcribe(word), back: `${inf} · to ${en} · tú: ${tu} · ${temps(stepText, 'metric')}`, tag: '#Cocina', created: Date.now() }); toast('Guardado en Penumbra'); };
     panel.replaceChildren(
       h('div', { class: 'row wrap', style: 'gap:12px;align-items:baseline' },
         h('span', { style: 'font-family:var(--display);font-size:28px;font-weight:700' }, word),

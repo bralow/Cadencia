@@ -285,7 +285,7 @@ export async function render(main) {
   saveBtn.onclick = async () => {
     if (!current) return;
     await db.put('mazo', { front: current.text, ipa: transcribe(current.text), back: '', tag: '#Sombra', audio: nativeBlob || undefined, created: Date.now() });
-    toast('Guardado en el Mazo');
+    toast('Guardado en Penumbra');
   };
   prevBtn.onclick = () => { if (session.index > 0) { session.index--; loadClip(); } };
   nextBtn.onclick = () => {

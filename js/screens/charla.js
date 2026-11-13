@@ -92,7 +92,7 @@ export async function render(main) {
       const body = m.pending && !m.text ? h('p', { class: 'muted small' }, m.live ? 'Flor está por hablar…' : 'Flor está escribiendo…')
         : tappableText(m.text, (word, b) => { markWord(list, b); showWordPanel(panel, word, { context: sentenceWith(m.text, word), tag: '#Charla' }); }, 'font-size:17px;line-height:1.5');
       const save = h('button', { type: 'button', class: 'pill', style: 'min-height:36px;font-size:12px;align-self:flex-start' }, 'Guardar frase');
-      save.onclick = async () => { await db.put('mazo', { front: m.text, ipa: transcribe(m.text), back: '', tag: '#Charla', created: Date.now() }); toast('Guardado en el Mazo'); };
+      save.onclick = async () => { await db.put('mazo', { front: m.text, ipa: transcribe(m.text), back: '', tag: '#Charla', created: Date.now() }); toast('Guardado en Penumbra'); };
       const again = h('button', { type: 'button', class: 'pill', style: 'min-height:36px;font-size:12px' }, '▶ Repetir');
       again.onclick = () => { unlockAudio(); if (again.textContent.startsWith('■')) { stopPcm(); stopPhone(); again.textContent = '▶ Repetir'; } else sayMsg(m, again); };
       return h('div', { class: 'card', style: 'gap:6px;padding:12px 14px;max-width:88%;align-self:flex-start;border-bottom-left-radius:6px' },

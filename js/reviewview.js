@@ -27,7 +27,7 @@ export function changeCard(c, tag) {
   const keep = h('button', { type: 'button', class: 'pill', style: 'min-height:32px;font-size:11px;align-self:flex-start' }, 'Guardar');
   keep.onclick = async () => {
     await db.put('mazo', { front: c.better, ipa: transcribe(c.better), back: `${c.original ? `En vez de «${c.original}». ` : ''}${c.why || ''}`.trim(), tag, created: Date.now() });
-    toast('Guardado en el Mazo'); keep.disabled = true; keep.textContent = '✓ Guardado';
+    toast('Guardado en Penumbra'); keep.disabled = true; keep.textContent = '✓ Guardado';
   };
   return h('div', { class: 'card', style: 'gap:4px;padding:10px 12px' },
     h('div', { class: 'row wrap', style: 'gap:6px;align-items:baseline' },
@@ -69,7 +69,7 @@ export function reviewView(text, r, opts = {}) {
   keepAll.onclick = async () => {
     const t = target();
     await db.put('mazo', { front: t, ipa: transcribe(t), back: `Mi versión: ${text}`, tag, created: Date.now() });
-    toast('Guardado en el Mazo');
+    toast('Guardado en Penumbra');
   };
   if (reuse) reuse.onclick = () => opts.reuse(r.corrected);
 

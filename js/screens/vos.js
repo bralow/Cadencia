@@ -82,7 +82,7 @@ export async function render(main) {
     const save = h('button', { type: 'button', class: 'pill', style: 'align-self:flex-start;margin-top:4px;background:transparent;color:var(--hero-ink);border-color:var(--hero-muted)' }, 'Guardar en Mazo');
     save.onclick = async () => {
       await db.put('mazo', { front: filled, ipa: transcribe(filled), back: `${q.verb.inf} (${q.verb.en}): vos ${q.answer} · ${q.tuForm}`, tag: '#Vos', created: Date.now() });
-      toast('Guardado en el Mazo');
+      toast('Guardado en Penumbra');
     };
     feedback.replaceChildren(
       h('div', { class: 'row', style: 'gap:8px;flex-wrap:wrap' },

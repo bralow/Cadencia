@@ -74,11 +74,11 @@ export async function render(main) {
     })));
 
   // Totals
-  const mazo = await db.count('mazo');
+  const mazo = new Set((await db.all('cards')).map((c) => c.note)).size;
   const n = (t) => events(t).length;
   main.append(h('section', { class: 'card', style: 'gap:4px' },
     h('h2', {}, 'En números'),
-    ...[['Tarjetas en el Mazo', mazo], ['Tomas en Sombra', events('sombra').filter((e) => e.recorded).length], ['Respuestas en Oído', n('oido')], ['Ejercicios de vos', n('vos')],
+    ...[['Guardadas en Penumbra', mazo], ['Tomas en Sombra', events('sombra').filter((e) => e.recorded).length], ['Respuestas en Oído', n('oido')], ['Ejercicios de vos', n('vos')],
       ['Trabalenguas grabados', n('traba')], ['Palabras consultadas', n('lookup')], ['Calentamientos', n('warmup')]]
       .map(([label, v]) => h('div', { class: 'between small', style: 'padding:4px 0' }, h('span', {}, label), h('b', {}, String(v))))));
 }
