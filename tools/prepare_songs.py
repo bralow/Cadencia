@@ -24,6 +24,8 @@ several times as long as the audio on a normal computer). Each song is transcrib
 singing voice separated from the music first when Demucs is installed (pip install demucs), which helps a lot.
 The result is saved next to it as "<name>.srt" (and "<name>.letra.json"), so it only happens once; correct the
 .srt by hand if you like. --retranscribir "plimplim 4" starts that file over.
+If you separated the voice yourself, put it next to the recording as "<name> voz.mp3" (or .wav; "(Vocals)" in the
+name works too): it is used for the lyrics only. An "<name> instrumental" file is ignored.
 A recording with no spreadsheet, list or chapters is taken as one whole song, named after the file.
 --sin-letra skips lyrics and Whisper altogether. No translations.
 
@@ -255,9 +257,14 @@ def get_separator():
     return _sep or None
 
 
-def song_audio(ffmpeg, src, start, end):
-    """The song as 16 kHz mono floats for Whisper; with only the voice when Demucs is installed."""
+def song_audio(ffmpeg, src, start, end, voice=None):
+    """The song as 16 kHz mono floats for Whisper: from your separated voice track if there is one,
+    else with the voice taken out by Demucs when it's installed, else the full mix."""
     import numpy as np
+    if voice:
+        pcm = subprocess.run([ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-ss", f"{start:.2f}", "-t", f"{end - start:.2f}",
+                              "-i", str(voice), "-f", "s16le", "-ac", "1", "-ar", "16000", "-"], capture_output=True, check=True).stdout
+        return np.frombuffer(pcm, np.int16).astype(np.float32) / 32768.0
     sep = get_separator()
     if sep:
         torch, model, apply_model = sep
@@ -279,7 +286,7 @@ def song_audio(ffmpeg, src, start, end):
     return np.frombuffer(pcm, np.int16).astype(np.float32) / 32768.0
 
 
-def whisper_lines(ffmpeg, src, model_name, songs):
+def whisper_lines(ffmpeg, src, model_name, songs, voice=None):
     """Transcribes each song of a recording on its own (sung lyrics need different settings from speech)."""
     cache = src.with_suffix(".letra.json")
     if cache.exists():
@@ -291,7 +298,7 @@ def whisper_lines(ffmpeg, src, model_name, songs):
     for song in sorted(songs, key=lambda x: x["start"]):
         a, b = song["start"], song["end"]
         print(f"  Transcribiendo «{song['title']}» ({clock(b - a)})…", flush=True)
-        audio = song_audio(ffmpeg, src, a, b)
+        audio = song_audio(ffmpeg, src, a, b, voice)
         opts = dict(language="es", word_timestamps=True, beam_size=5,
                     vad_filter=False,                      # the speech filter throws away singing
                     condition_on_previous_text=True,       # songs repeat; context keeps spelling consistent
@@ -420,7 +427,19 @@ def main():
     if not ffmpeg or not ffprobe:
         sys.exit("No encuentro ffmpeg. En Windows: winget install Gyan.FFmpeg  y abrí una ventana nueva.")
     folder = Path(args.folder)
-    files = sorted([p for p in folder.rglob("*") if p.is_file() and p.suffix.lower() in EXTS], key=natural_key)
+    every = sorted([p for p in folder.rglob("*") if p.is_file() and p.suffix.lower() in EXTS], key=natural_key)
+    # A separated voice track ("plimplim 4 voz.mp3", "plimplim 4 (Vocals).wav"…) is used only for the lyrics;
+    # an instrumental track is ignored. Neither is cut into songs.
+    VOICE = re.compile(r"[\s._\-(\[]*(voz|voces|vocals?|voice|acapella|a capella)[)\]]*$", re.I)
+    INSTR = re.compile(r"[\s._\-(\[]*(instrumental|instr|music|musica|música|karaoke|no[\s_-]?vocals?|accompaniment)[)\]]*$", re.I)
+    voice_tracks, files = {}, []
+    for p in every:
+        if VOICE.search(p.stem):
+            voice_tracks[norm(VOICE.sub("", p.stem))] = p
+        elif not INSTR.search(p.stem):
+            files.append(p)
+    for k, v in voice_tracks.items():
+        print(f"Voz separada: {v.name} (la uso solo para la letra)")
     if not files:
         sys.exit(f"No encontré videos en {folder}")
     by_name = {}
@@ -506,7 +525,7 @@ def main():
                 lines = read_srt(srt)
                 print(f"  {src.name}: {len(lines)} líneas de {srt.name}")
             else:
-                lines = whisper_lines(ffmpeg, src, args.modelo, group)
+                lines = whisper_lines(ffmpeg, src, args.modelo, group, voice_tracks.get(norm(src.stem)))
             for x in group:
                 x["lines"] = lyrics_for(x, lines)
 
