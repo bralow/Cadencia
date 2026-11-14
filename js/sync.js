@@ -245,6 +245,21 @@ export function syncNow({ interactive = false, onProgress = () => {} } = {}) {
     try {
       onProgress('Leyendo tu Drive…');
       const files = await listFiles();
+      // Cards LenguaTube left in this folder: add them, then remove the files (before merging, so the
+      // new cards go up in this same sync).
+      let fromLenguaTube = 0;
+      const inbox = [...files].filter(([name]) => name.startsWith('lenguatube-inbox-'));
+      if (inbox.length) {
+        onProgress('Trayendo tarjetas de LenguaTube…');
+        const { importInbox } = await import('./lenguatube.js');
+        for (const [name, id] of inbox) {
+          try {
+            fromLenguaTube += await importInbox(await (await api(`${API}/${id}?alt=media`)).json());
+            await api(`${API}/${id}`, { method: 'DELETE' });
+            files.delete(name);
+          } catch (e) { /* stays in Drive; tried again next sync */ }
+        }
+      }
       let remote = {};
       if (files.has(DATA_NAME)) remote = await (await api(`${API}/${files.get(DATA_NAME)}?alt=media`)).json();
       onProgress('Combinando…');
@@ -261,8 +276,10 @@ export function syncNow({ interactive = false, onProgress = () => {} } = {}) {
       for (const [h, b] of missing) { onProgress(`Subiendo audio e imágenes… ${++n} de ${missing.length}`); files.set(`b-${h}`, await upload(`b-${h}`, b)); }
       onProgress('Guardando…');
       await upload(DATA_NAME, new Blob([JSON.stringify(out)], { type: 'application/json' }), files.get(DATA_NAME));
+      if (fromLenguaTube) stats.lenguatube = fromLenguaTube;
       setState({ busy: false, lastSync: Date.now(), error: '', last: stats });
-      if (stats.in) window.dispatchEvent(new Event('cadencia:rerender'));
+      if (stats.in || fromLenguaTube) window.dispatchEvent(new Event('cadencia:rerender'));
+      if (fromLenguaTube) import('./ui.js').then(({ toast }) => toast(`${fromLenguaTube} ${fromLenguaTube === 1 ? 'tarjeta nueva' : 'tarjetas nuevas'} de LenguaTube`)).catch(() => {});
       return stats;
     } catch (e) { setState({ busy: false, error: String(e.message || e) }); throw e; }
   })().finally(() => { running = null; });

@@ -221,7 +221,7 @@ function syncSection() {
       box.append(id, go);
     } else {
       const line = st.busy ? 'Sincronizando…' : st.error ? `Último intento falló: ${st.error}` : `Última sincronización: ${ago(st.lastSync)}`;
-      const last = st.last && !st.error ? ` · ${st.last.in} llegaron, ${st.last.out} subieron${st.last.deleted ? `, ${st.last.deleted} borradas` : ''}` : '';
+      const last = st.last && !st.error ? ` · ${st.last.in} llegaron, ${st.last.out} subieron${st.last.deleted ? `, ${st.last.deleted} borradas` : ''}${st.last.lenguatube ? `, ${st.last.lenguatube} de LenguaTube` : ''}` : '';
       const now = h('button', { type: 'button', class: 'btn' }, '☁ Sincronizar ahora');
       now.onclick = async () => {
         now.disabled = true;
